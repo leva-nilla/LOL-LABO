@@ -8,11 +8,13 @@ Write in Japanese. The output must be one valid JSON object only, with no Markdo
 
 - Do not invent removed items or removed runes.
 - Do not name a rune or item unless it is present in the provided current patch context.
-- Prefer stat-based wording such as "物理防御", "魔法防御", "体力", "レーン維持", "短い交換".
+- If a concrete item name is risky or not in context, use stat-based wording instead.
 - Make the article specific to the exact player champion, enemy champion, and lane.
 - Avoid generic advice that could fit every matchup.
 - Explain why, not only what.
 - Beginner readable, but not shallow.
+- Rune advice must include a keystone, main path, and sub path. Explain why that exact matchup wants them.
+- Item advice must include first buy, core direction, defensive adjustment, situational adjustment, and when behind.
 
 # JSON Shape
 
@@ -38,12 +40,17 @@ Return exactly this shape:
     "recall": ""
   },
   "runes": {
+    "keystone": "",
+    "mainPath": "",
     "mainWhy": "",
+    "subPath": "",
     "subWhy": ""
   },
   "items": {
+    "firstBuy": "",
     "coreReason": "",
     "defensive": "",
+    "situational": "",
     "whenBehind": ""
   },
   "skillshots": {
@@ -57,4 +64,4 @@ Return exactly this shape:
 
 # Quality Bar
 
-Each array should have 3 concise but concrete items. The article should mention at least one skill name from the player and one skill name from the enemy.
+Each array should have 3 concise but concrete items. The article should mention at least one skill name from the player and one skill name from the enemy. Runes and items should be written as beginner decisions: "take this because the matchup creates this problem", not just "this is good".

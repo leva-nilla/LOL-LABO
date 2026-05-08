@@ -10,7 +10,9 @@ Review one proposed article. Return JSON only.
 - It mentions concrete skills where useful.
 - It is beginner-readable.
 - It avoids removed item or rune names.
+- It includes a concrete keystone, main path, and sub path from the provided current patch context.
 - It explains rune and item logic without pretending one fixed build is always correct.
+- It explains first buy, core direction, defensive adjustment, situational adjustment, and when behind.
 - It has no contradictions such as telling a weak early champion to force level 1 fights.
 - It includes lane phase, wave, recall, skillshot, dodge, teamfight, and mistakes.
 

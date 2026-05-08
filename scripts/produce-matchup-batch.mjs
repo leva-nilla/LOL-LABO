@@ -82,12 +82,40 @@ function compactChampion(detail) {
   };
 }
 
-function buildWriterPrompt({ basePrompt, entry, patch, playerDetail, enemyDetail }) {
+function compactRunes(runes) {
+  return runes.map((tree) => ({
+    id: tree.id,
+    name: tree.name,
+    keystones: (tree.slots?.[0]?.runes || []).map((rune) => rune.name)
+  }));
+}
+
+function compactItems(items) {
+  return Object.values(items.data || {})
+    .filter((item) => item.gold?.purchasable && item.maps?.["11"] !== false && !item.requiredChampion && Number(item.gold.total || 0) >= 900)
+    .map((item) => ({
+      name: item.name,
+      gold: item.gold.total,
+      tags: item.tags || [],
+      stats: item.stats || {}
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function buildWriterPrompt({ basePrompt, entry, patch, playerDetail, enemyDetail, runes, items }) {
   return [
     basePrompt,
     "",
     "# Current Patch",
     patch,
+    "",
+    "# Current Rune Context",
+    "Use only these rune path and keystone names when naming runes.",
+    JSON.stringify(compactRunes(runes), null, 2),
+    "",
+    "# Current Item Context",
+    "Use only these item names when naming items. If unsure, write stat-based advice instead of naming an item.",
+    JSON.stringify(compactItems(items), null, 2),
     "",
     "# Matchup Entry",
     JSON.stringify(entry, null, 2),
@@ -100,8 +128,19 @@ function buildWriterPrompt({ basePrompt, entry, patch, playerDetail, enemyDetail
   ].join("\n");
 }
 
-function buildReviewerPrompt({ basePrompt, article }) {
-  return [basePrompt, "", "# Article", JSON.stringify(article, null, 2)].join("\n");
+function buildReviewerPrompt({ basePrompt, article, runes, items }) {
+  return [
+    basePrompt,
+    "",
+    "# Current Rune Context",
+    JSON.stringify(compactRunes(runes), null, 2),
+    "",
+    "# Current Item Context",
+    JSON.stringify(compactItems(items), null, 2),
+    "",
+    "# Article",
+    JSON.stringify(article, null, 2)
+  ].join("\n");
 }
 
 function nextQueued(queue, manual, limit) {
@@ -131,6 +170,8 @@ const manual = await readJson(MANUAL_PATH);
 const writerBase = await fs.readFile("prompts/codex-writer.md", "utf8");
 const reviewerBase = await fs.readFile("prompts/gemini-reviewer.md", "utf8");
 const entries = nextQueued(queue, manual, limit);
+const currentRunes = await loadJson(`${DDRAGON_ROOT}/cdn/${queue.patch}/data/ja_JP/runesReforged.json`);
+const currentItems = await loadJson(`${DDRAGON_ROOT}/cdn/${queue.patch}/data/ja_JP/item.json`);
 
 await fs.mkdir(OUT_DIR, { recursive: true });
 
@@ -153,7 +194,9 @@ for (const entry of entries) {
     entry,
     patch: queue.patch,
     playerDetail,
-    enemyDetail
+    enemyDetail,
+    runes: currentRunes,
+    items: currentItems
   });
   const writerPromptPath = path.join(OUT_DIR, `${entry.id}.writer.md`);
   await fs.writeFile(writerPromptPath, writerPrompt, "utf8");
@@ -173,7 +216,7 @@ for (const entry of entries) {
   const article = tryParseJson(await fs.readFile(articlePath, "utf8"));
   await fs.writeFile(articlePath, `${JSON.stringify(article, null, 2)}\n`, "utf8");
 
-  const reviewerPrompt = buildReviewerPrompt({ basePrompt: reviewerBase, article });
+  const reviewerPrompt = buildReviewerPrompt({ basePrompt: reviewerBase, article, runes: currentRunes, items: currentItems });
   const reviewerPromptPath = path.join(OUT_DIR, `${entry.id}.reviewer.md`);
   await fs.writeFile(reviewerPromptPath, reviewerPrompt, "utf8");
   const reviewPath = path.join(OUT_DIR, `${entry.id}.review.json`);

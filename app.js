@@ -685,8 +685,8 @@ function manualArticleCards(article) {
       <section class="info-card"><h3>警戒すること</h3><ul>${listItems(article.threatModel)}</ul></section>
       <section class="info-card"><h3>トレード</h3><ul>${listItems(article.trading)}</ul></section>
       <section class="info-card"><h3>レーン進行</h3><ol><li>${article.lanePlan?.levels1to3 || ""}</li><li>${article.lanePlan?.preSix || ""}</li><li>${article.lanePlan?.postSix || ""}</li><li>${article.lanePlan?.wave || ""}</li><li>${article.lanePlan?.recall || ""}</li></ol></section>
-      <section class="info-card"><h3>ルーン基準</h3><p>${article.runes?.mainWhy || ""}</p><p>${article.runes?.subWhy || ""}</p></section>
-      <section class="info-card"><h3>アイテム基準</h3><p>${article.items?.coreReason || ""}</p><p>${article.items?.defensive || ""}</p><p>${article.items?.whenBehind || ""}</p></section>
+      <section class="info-card"><h3>ルーン基準</h3><p><strong>${article.runes?.keystone || ""}</strong> / ${article.runes?.mainPath || ""} + ${article.runes?.subPath || ""}</p><p>${article.runes?.mainWhy || ""}</p><p>${article.runes?.subWhy || ""}</p></section>
+      <section class="info-card"><h3>アイテム基準</h3><p>${article.items?.firstBuy || ""}</p><p>${article.items?.coreReason || ""}</p><p>${article.items?.defensive || ""}</p><p>${article.items?.situational || ""}</p><p>${article.items?.whenBehind || ""}</p></section>
       <section class="info-card"><h3>ミス</h3><ul>${listItems(article.commonMistakes)}</ul></section>
     </div>
   `;

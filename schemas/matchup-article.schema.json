@@ -46,19 +46,24 @@
     "runes": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["mainWhy", "subWhy"],
+      "required": ["keystone", "mainPath", "mainWhy", "subPath", "subWhy"],
       "properties": {
+        "keystone": { "type": "string" },
+        "mainPath": { "type": "string" },
         "mainWhy": { "type": "string" },
+        "subPath": { "type": "string" },
         "subWhy": { "type": "string" }
       }
     },
     "items": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["coreReason", "defensive", "whenBehind"],
+      "required": ["firstBuy", "coreReason", "defensive", "situational", "whenBehind"],
       "properties": {
+        "firstBuy": { "type": "string" },
         "coreReason": { "type": "string" },
         "defensive": { "type": "string" },
+        "situational": { "type": "string" },
         "whenBehind": { "type": "string" }
       }
     },
