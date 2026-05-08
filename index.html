@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LoL Beginner Lab</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">L</div>
+          <div>
+            <h1>LoL Beginner Lab</h1>
+            <p id="patchLabel">Data Dragon 読み込み中</p>
+          </div>
+        </div>
+
+        <div class="search-block">
+          <label for="championSearch">チャンピオン検索</label>
+          <input id="championSearch" type="search" placeholder="例: Ahri / アーリ" autocomplete="off" />
+        </div>
+
+        <div class="filter-block">
+          <span>レーン</span>
+          <div class="segmented" id="laneFilters"></div>
+        </div>
+
+        <div class="filter-block">
+          <span>学習テーマ</span>
+          <div class="nav-list" id="topicNav"></div>
+        </div>
+
+        <div class="status-card">
+          <span>対象</span>
+          <strong id="championCount">0体</strong>
+          <p>最新のRiot Data Dragonを使い、初心者向けの判断基準として整理します。</p>
+        </div>
+      </aside>
+
+      <main class="content">
+        <section class="matchup-panel" aria-label="対戦中アシスト">
+          <div class="panel-heading">
+            <div>
+              <span class="eyebrow">In Game Assist</span>
+              <h2>使用キャラと対面から、今見るべき有利条件を出す</h2>
+            </div>
+            <button class="icon-button" id="swapMatchup" title="使用キャラと対面を入れ替え">⇄</button>
+          </div>
+          <div class="duel-grid">
+            <label>
+              使用キャラ
+              <select id="playerChampion"></select>
+            </label>
+            <label>
+              対面
+              <select id="enemyChampion"></select>
+            </label>
+            <label>
+              レーン
+              <select id="matchupLane"></select>
+            </label>
+          </div>
+          <div class="matchup-result" id="matchupResult"></div>
+        </section>
+
+        <section class="workspace">
+          <div class="champion-list-wrap">
+            <div class="section-head">
+              <h2>全チャンピオン</h2>
+              <span id="listMeta">読み込み中</span>
+            </div>
+            <div class="champion-list" id="championList"></div>
+          </div>
+
+          <article class="detail" id="championDetail">
+            <div class="empty-state">
+              <h2>チャンピオンを選択</h2>
+              <p>ルーン、キーストーン、アイテム、レーン別の動き、マッチアップ対応をここに表示します。</p>
+            </div>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

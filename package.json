@@ -1,0 +1,16 @@
+{
+  "name": "lol-beginner-lab",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "queue": "node scripts/generate-matchup-queue.mjs",
+    "validate:articles": "node scripts/validate-matchup-articles.mjs",
+    "batch:dry": "node scripts/produce-matchup-batch.mjs --limit 10 --dry-run",
+    "merge:dry": "node scripts/merge-produced-articles.mjs --dry-run",
+    "merge": "node scripts/merge-produced-articles.mjs",
+    "status": "node scripts/production-status.mjs",
+    "produce:loop": "node scripts/run-production-loop.mjs"
+  }
+}

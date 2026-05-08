@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "status",
+    "updatedAt",
+    "player",
+    "enemy",
+    "lane",
+    "summary",
+    "winCondition",
+    "threatModel",
+    "trading",
+    "lanePlan",
+    "runes",
+    "items",
+    "skillshots",
+    "teamfights",
+    "commonMistakes"
+  ],
+  "properties": {
+    "id": { "type": "string" },
+    "status": { "enum": ["draft", "reviewed"] },
+    "updatedAt": { "type": "string" },
+    "player": { "type": "string" },
+    "enemy": { "type": "string" },
+    "lane": { "enum": ["TOP", "JG", "MID", "ADC", "SUP", "ALL"] },
+    "summary": { "type": "string" },
+    "winCondition": { "type": "string" },
+    "threatModel": { "type": "array", "items": { "type": "string" }, "minItems": 3 },
+    "trading": { "type": "array", "items": { "type": "string" }, "minItems": 3 },
+    "lanePlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["levels1to3", "preSix", "postSix", "wave", "recall"],
+      "properties": {
+        "levels1to3": { "type": "string" },
+        "preSix": { "type": "string" },
+        "postSix": { "type": "string" },
+        "wave": { "type": "string" },
+        "recall": { "type": "string" }
+      }
+    },
+    "runes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mainWhy", "subWhy"],
+      "properties": {
+        "mainWhy": { "type": "string" },
+        "subWhy": { "type": "string" }
+      }
+    },
+    "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["coreReason", "defensive", "whenBehind"],
+      "properties": {
+        "coreReason": { "type": "string" },
+        "defensive": { "type": "string" },
+        "whenBehind": { "type": "string" }
+      }
+    },
+    "skillshots": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hit", "dodge"],
+      "properties": {
+        "hit": { "type": "array", "items": { "type": "string" }, "minItems": 3 },
+        "dodge": { "type": "array", "items": { "type": "string" }, "minItems": 3 }
+      }
+    },
+    "teamfights": { "type": "array", "items": { "type": "string" }, "minItems": 3 },
+    "commonMistakes": { "type": "array", "items": { "type": "string" }, "minItems": 3 }
+  }
+}

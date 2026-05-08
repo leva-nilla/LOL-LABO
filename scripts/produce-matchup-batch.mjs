@@ -1,0 +1,193 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+import { spawn } from "node:child_process";
+
+const QUEUE_PATH = "data/matchup-queue.json";
+const MANUAL_PATH = "data/manual-matchups.json";
+const OUT_DIR = "work/matchup-production";
+const DDRAGON_ROOT = "https://ddragon.leagueoflegends.com";
+
+function hasFlag(name) {
+  return process.argv.includes(name);
+}
+
+function argValue(name, fallback) {
+  const index = process.argv.indexOf(name);
+  return index === -1 ? fallback : process.argv[index + 1];
+}
+
+async function readJson(file) {
+  return JSON.parse(await fs.readFile(file, "utf8"));
+}
+
+async function exists(file) {
+  try {
+    await fs.access(file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function loadJson(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}: ${url}`);
+  return response.json();
+}
+
+function commandParts(envName, fallback) {
+  const raw = process.env[envName] || fallback;
+  return raw.split(" ").filter(Boolean);
+}
+
+function runCommand(command, args, input) {
+  return new Promise((resolve, reject) => {
+    const isWindowsCmd = process.platform === "win32" && command.toLowerCase().endsWith(".cmd");
+    const spawnCommand = isWindowsCmd ? "cmd.exe" : command;
+    const spawnArgs = isWindowsCmd ? ["/c", command, ...args] : args;
+    const child = spawn(spawnCommand, spawnArgs, { stdio: ["pipe", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) resolve({ stdout, stderr });
+      else reject(new Error(`${command} ${args.join(" ")} failed with ${code}\n${stderr}`));
+    });
+    child.stdin.end(input);
+  });
+}
+
+async function championDetail(version, id) {
+  const data = await loadJson(`${DDRAGON_ROOT}/cdn/${version}/data/ja_JP/champion/${id}.json`);
+  return data.data[id];
+}
+
+function compactChampion(detail) {
+  return {
+    id: detail.id,
+    name: detail.name,
+    title: detail.title,
+    tags: detail.tags,
+    passive: {
+      name: detail.passive?.name,
+      description: detail.passive?.description
+    },
+    spells: (detail.spells || []).map((spell, index) => ({
+      key: ["Q", "W", "E", "R"][index],
+      name: spell.name,
+      description: spell.description
+    }))
+  };
+}
+
+function buildWriterPrompt({ basePrompt, entry, patch, playerDetail, enemyDetail }) {
+  return [
+    basePrompt,
+    "",
+    "# Current Patch",
+    patch,
+    "",
+    "# Matchup Entry",
+    JSON.stringify(entry, null, 2),
+    "",
+    "# Player Champion",
+    JSON.stringify(compactChampion(playerDetail), null, 2),
+    "",
+    "# Enemy Champion",
+    JSON.stringify(compactChampion(enemyDetail), null, 2)
+  ].join("\n");
+}
+
+function buildReviewerPrompt({ basePrompt, article }) {
+  return [basePrompt, "", "# Article", JSON.stringify(article, null, 2)].join("\n");
+}
+
+function nextQueued(queue, manual, limit) {
+  const written = new Set((manual.articles || []).map((article) => article.id));
+  return queue.entries.filter((entry) => !written.has(entry.id)).slice(0, limit);
+}
+
+function tryParseJson(text) {
+  let trimmed = text.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  if (fenced) trimmed = fenced[1].trim();
+  if (!trimmed.startsWith("{")) {
+    const start = trimmed.indexOf("{");
+    const end = trimmed.lastIndexOf("}");
+    if (start !== -1 && end !== -1 && end > start) {
+      trimmed = trimmed.slice(start, end + 1);
+    }
+  }
+  return JSON.parse(trimmed);
+}
+
+const limit = Number(argValue("--limit", "10"));
+const dryRun = hasFlag("--dry-run");
+const execute = hasFlag("--execute");
+const queue = await readJson(QUEUE_PATH);
+const manual = await readJson(MANUAL_PATH);
+const writerBase = await fs.readFile("prompts/codex-writer.md", "utf8");
+const reviewerBase = await fs.readFile("prompts/gemini-reviewer.md", "utf8");
+const entries = nextQueued(queue, manual, limit);
+
+await fs.mkdir(OUT_DIR, { recursive: true });
+
+if (!entries.length) {
+  console.log("no queued entries left");
+  process.exit(0);
+}
+
+const codexParts = commandParts(
+  "CODEX_CLI_CMD",
+  "npx.cmd -y @openai/codex exec --skip-git-repo-check --sandbox read-only --output-schema schemas/matchup-article.schema.json"
+);
+const geminiParts = commandParts("GEMINI_CLI_CMD", "npx.cmd -y @google/gemini-cli");
+
+for (const entry of entries) {
+  const playerDetail = await championDetail(queue.patch, entry.player);
+  const enemyDetail = await championDetail(queue.patch, entry.enemy);
+  const writerPrompt = buildWriterPrompt({
+    basePrompt: writerBase,
+    entry,
+    patch: queue.patch,
+    playerDetail,
+    enemyDetail
+  });
+  const writerPromptPath = path.join(OUT_DIR, `${entry.id}.writer.md`);
+  await fs.writeFile(writerPromptPath, writerPrompt, "utf8");
+
+  if (dryRun || !execute) {
+    console.log(`prepared ${entry.id}`);
+    console.log(`  writer prompt: ${writerPromptPath}`);
+    console.log(`  codex command: ${codexParts.join(" ")} - < ${writerPromptPath}`);
+    continue;
+  }
+
+  const articlePath = path.join(OUT_DIR, `${entry.id}.article.json`);
+  if (!(await exists(articlePath))) {
+    const codexArgs = [...codexParts.slice(1), "--output-last-message", articlePath, "-"];
+    await runCommand(codexParts[0], codexArgs, writerPrompt);
+  }
+  const article = tryParseJson(await fs.readFile(articlePath, "utf8"));
+  await fs.writeFile(articlePath, `${JSON.stringify(article, null, 2)}\n`, "utf8");
+
+  const reviewerPrompt = buildReviewerPrompt({ basePrompt: reviewerBase, article });
+  const reviewerPromptPath = path.join(OUT_DIR, `${entry.id}.reviewer.md`);
+  await fs.writeFile(reviewerPromptPath, reviewerPrompt, "utf8");
+  const reviewPath = path.join(OUT_DIR, `${entry.id}.review.json`);
+  let review;
+  if (await exists(reviewPath)) {
+    review = tryParseJson(await fs.readFile(reviewPath, "utf8"));
+  } else {
+    const geminiResult = await runCommand(
+      geminiParts[0],
+      [...geminiParts.slice(1), "--prompt", "Review the article from stdin. Return JSON only.", "--output-format", "text"],
+      reviewerPrompt
+    );
+    review = tryParseJson(geminiResult.stdout);
+    await fs.writeFile(reviewPath, `${JSON.stringify(review, null, 2)}\n`, "utf8");
+  }
+  console.log(`wrote ${articlePath} and ${reviewPath}: ${review.decision}`);
+}
