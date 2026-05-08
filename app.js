@@ -338,6 +338,239 @@ function itemPlan(champion, enemy, detail) {
   return { stats: statGoals[type] || statGoals.汎用, core, counter, behind };
 }
 
+function itemText(item) {
+  return stripHtml(`${item.name || ""} ${item.plaintext || ""} ${item.description || ""}`).toLowerCase();
+}
+
+function itemStat(item, key) {
+  return Number(item.stats?.[key] || 0);
+}
+
+function itemHasTag(item, tag) {
+  return (item.tags || []).includes(tag);
+}
+
+function itemHasAnyTag(item, tags) {
+  return tags.some((tag) => itemHasTag(item, tag));
+}
+
+function isCurrentSummonersRiftItem(item) {
+  return mapLegalItem(item) && item.gold?.purchasable && !item.requiredChampion && Number(item.gold.total || 0) >= 900;
+}
+
+function championItemProfile(champion) {
+  const type = archetype(champion);
+  const id = champion.id;
+  const mageBot = new Set(["Ziggs", "Seraphine", "Karthus", "Swain", "Veigar", "Heimerdinger", "Brand", "Lux", "Velkoz", "Xerath"]);
+  const apAssassins = new Set(["Akali", "Diana", "Ekko", "Evelynn", "Fizz", "Kassadin", "Katarina", "Leblanc"]);
+  const onHitMarksmen = new Set(["Kaisa", "KogMaw", "Varus", "Vayne", "Kalista", "Twitch"]);
+  const enchanters = new Set(["Janna", "Lulu", "Milio", "Nami", "Renata", "Sona", "Soraka", "Yuumi", "Seraphine"]);
+
+  if (mageBot.has(id) || type === "メイジ") {
+    return {
+      kind: "ap",
+      label: "APスキル型",
+      stats: ["魔力", "スキルヘイスト", "マナまたはマナ回復", "魔法防御貫通"],
+      core: "スキル命中で勝つため、ADやクリティカルではなく魔力・ヘイスト・魔法貫通を優先します。",
+    };
+  }
+  if (type === "マークスマン") {
+    return {
+      kind: onHitMarksmen.has(id) ? "onhit" : "crit",
+      label: onHitMarksmen.has(id) ? "通常攻撃/オンヒット型" : "クリティカルADC型",
+      stats: onHitMarksmen.has(id)
+        ? ["攻撃速度", "攻撃力", "通常攻撃時効果", "ライフスティールまたは耐久"]
+        : ["攻撃力", "攻撃速度", "クリティカル", "ライフスティール"],
+      core: onHitMarksmen.has(id)
+        ? "通常攻撃を当て続ける型なので、攻撃速度と通常攻撃時効果を中心に見ます。"
+        : "通常攻撃のDPSを伸ばす型なので、攻撃力・攻撃速度・クリティカルの噛み合いを見ます。",
+    };
+  }
+  if (type === "アサシン") {
+    const ap = apAssassins.has(id) || damageProfile(champion) === "AP寄り";
+    return {
+      kind: ap ? "apAssassin" : "adAssassin",
+      label: ap ? "APアサシン型" : "ADアサシン型",
+      stats: ap ? ["魔力", "魔法防御貫通", "スキルヘイスト", "移動速度"] : ["攻撃力", "脅威/物理防御貫通", "スキルヘイスト", "移動速度"],
+      core: "短時間で倒し切る型なので、耐久だけのアイテムよりバーストに直結するステータスを優先します。",
+    };
+  }
+  if (type === "タンク") {
+    return {
+      kind: "tank",
+      label: "タンク型",
+      stats: ["体力", "物理防御", "魔法防御", "行動妨害耐性"],
+      core: "前に立つ役割なので、火力アイテムより相手の主ダメージに合う防御を優先します。",
+    };
+  }
+  if (type === "サポート") {
+    const enchanter = enchanters.has(id) || damageProfile(champion) === "AP寄り";
+    return {
+      kind: enchanter ? "enchanter" : "tankSupport",
+      label: enchanter ? "エンチャンター/メイジサポート型" : "タンクサポート型",
+      stats: enchanter ? ["サポート収入", "スキルヘイスト", "回復/シールド強化", "視界"] : ["サポート収入", "体力", "物理防御/魔法防御", "視界"],
+      core: "サポートは収入と視界が役割に直結します。非サポート用の高額火力だけを急ぐと仕事が遅れます。",
+    };
+  }
+  return {
+    kind: "fighter",
+    label: "ファイター型",
+    stats: ["攻撃力", "体力", "スキルヘイスト", "相手に合わせた防御"],
+    core: "殴り合いを続ける型なので、火力と耐久が両方伸びるアイテムを優先します。",
+  };
+}
+
+function itemBucketScore(item, profile, enemy, bucket) {
+  if (!isCurrentSummonersRiftItem(item)) return -Infinity;
+  const tags = item.tags || [];
+  const text = itemText(item);
+  const isSupportOnly = itemHasAnyTag(item, ["GoldPer", "Vision"]);
+  const isBoots = itemHasTag(item, "Boots");
+  const ad = itemStat(item, "FlatPhysicalDamageMod");
+  const ap = itemStat(item, "FlatMagicDamageMod");
+  const as = itemStat(item, "PercentAttackSpeedMod");
+  const crit = itemStat(item, "FlatCritChanceMod");
+  const hp = itemStat(item, "FlatHPPoolMod");
+  const armor = itemStat(item, "FlatArmorMod");
+  const mr = itemStat(item, "FlatSpellBlockMod");
+  const mana = itemStat(item, "FlatMPPoolMod");
+  const hasteText = text.includes("スキルヘイスト") || text.includes("ability haste");
+  const lifesteal = itemHasTag(item, "LifeSteal") || text.includes("ライフスティール");
+  const pen = itemHasAnyTag(item, ["ArmorPenetration", "MagicPenetration"]) || text.includes("貫通") || text.includes("脅威");
+  const antiHeal = text.includes("重傷") || text.includes("回復") || text.includes("heal");
+  const antiShield = text.includes("シールド") || text.includes("shield");
+
+  if (!["enchanter", "tankSupport"].includes(profile.kind) && isSupportOnly) return -Infinity;
+  if (["crit", "onhit"].includes(profile.kind) && itemHasAnyTag(item, ["SpellDamage", "Mana"]) && !ad && !as && !crit) return -Infinity;
+  if (["ap", "apAssassin", "enchanter"].includes(profile.kind) && (crit || itemHasTag(item, "CriticalStrike")) && !ap) return -Infinity;
+  if (profile.kind === "adAssassin" && ap && !ad) return -Infinity;
+
+  let score = 0;
+  if (bucket === "defense") {
+    const enemyDamage = enemy ? damageProfile(enemy) : "";
+    if (enemyDamage === "AD寄り") score += armor * 0.08 + hp * 0.01;
+    else if (enemyDamage === "AP寄り") score += mr * 0.1 + hp * 0.01;
+    else score += armor * 0.04 + mr * 0.05 + hp * 0.01;
+    if (score <= 0 && !isBoots) return -Infinity;
+    return score + (isBoots ? 1 : 0);
+  }
+
+  if (bucket === "situational") {
+    if (antiHeal) score += 5;
+    if (antiShield) score += 4;
+    if (lifesteal) score += 2;
+    if (pen) score += 2;
+    if (isBoots) score += 2;
+    if (score <= 0) return -Infinity;
+    return score;
+  }
+
+  switch (profile.kind) {
+    case "crit":
+      score += ad * 0.05 + as * 18 + crit * 40 + (lifesteal ? 2 : 0);
+      if (!ad && !as && !crit) return -Infinity;
+      break;
+    case "onhit":
+      score += ad * 0.04 + as * 24 + crit * 12 + (lifesteal ? 2 : 0) + (text.includes("通常攻撃") || text.includes("on-hit") ? 5 : 0);
+      if (!ad && !as && !text.includes("通常攻撃")) return -Infinity;
+      break;
+    case "ap":
+      score += ap * 0.07 + mana * 0.003 + (hasteText ? 2 : 0) + (pen ? 3 : 0);
+      if (!ap && !pen) return -Infinity;
+      break;
+    case "apAssassin":
+      score += ap * 0.08 + (pen ? 4 : 0) + (hasteText ? 2 : 0);
+      if (!ap && !pen) return -Infinity;
+      break;
+    case "adAssassin":
+      score += ad * 0.07 + (pen ? 5 : 0) + (hasteText ? 2 : 0);
+      if (!ad && !pen) return -Infinity;
+      break;
+    case "tank":
+      score += hp * 0.01 + armor * 0.06 + mr * 0.07 + (text.includes("行動妨害") ? 2 : 0);
+      if (!hp && !armor && !mr) return -Infinity;
+      break;
+    case "enchanter":
+      score += (isSupportOnly ? 4 : 0) + ap * 0.04 + (hasteText ? 2 : 0) + (text.includes("回復") || text.includes("シールド") ? 3 : 0);
+      if (!isSupportOnly && !ap && !hasteText) return -Infinity;
+      break;
+    case "tankSupport":
+      score += (isSupportOnly ? 4 : 0) + hp * 0.01 + armor * 0.05 + mr * 0.06 + (hasteText ? 1 : 0);
+      if (!isSupportOnly && !hp && !armor && !mr) return -Infinity;
+      break;
+    default:
+      score += ad * 0.05 + hp * 0.01 + armor * 0.03 + mr * 0.03 + (hasteText ? 2 : 0);
+      if (!ad && !hp && !armor && !mr) return -Infinity;
+  }
+  return score + Math.min(Number(item.gold.total || 0) / 3500, 1);
+}
+
+function rankedItems(profile, enemy, bucket, limit) {
+  return state.items
+    .map((item) => ({ item, score: itemBucketScore(item, profile, enemy, bucket) }))
+    .filter(({ score }) => Number.isFinite(score) && score > 0)
+    .sort((a, b) => b.score - a.score || b.item.gold.total - a.item.gold.total)
+    .slice(0, limit)
+    .map(({ item }) => item);
+}
+
+function findItemGroups(champion, enemy) {
+  const profile = championItemProfile(champion);
+  return {
+    profile,
+    core: rankedItems(profile, enemy, "core", 5),
+    defense: rankedItems(profile, enemy, "defense", 4),
+    situational: rankedItems(profile, enemy, "situational", 4),
+  };
+}
+
+function itemReasonByProfile(item, champion, enemy, bucket = "core", profile = championItemProfile(champion)) {
+  const stats = [];
+  if (itemStat(item, "FlatPhysicalDamageMod")) stats.push("攻撃力");
+  if (itemStat(item, "FlatMagicDamageMod")) stats.push("魔力");
+  if (itemStat(item, "PercentAttackSpeedMod")) stats.push("攻撃速度");
+  if (itemStat(item, "FlatCritChanceMod")) stats.push("クリティカル");
+  if (itemStat(item, "FlatHPPoolMod")) stats.push("体力");
+  if (itemStat(item, "FlatArmorMod")) stats.push("物理防御");
+  if (itemStat(item, "FlatSpellBlockMod")) stats.push("魔法防御");
+  const text = itemText(item);
+  if (text.includes("重傷")) stats.push("重傷");
+  if (text.includes("シールド")) stats.push("シールド対策");
+  if (itemHasAnyTag(item, ["GoldPer", "Vision"])) stats.push("サポート収入/視界");
+  if (itemHasTag(item, "Boots")) stats.push("移動速度");
+  const target = bucket === "defense" && enemy ? `${enemy.name}の${damageProfile(enemy)}に合わせる` : profile.label;
+  return `${target}: ${stats.slice(0, 3).join("・") || stripHtml(item.plaintext || item.description).slice(0, 36)}を買う理由にする`;
+}
+
+function renderItemGroup(title, items, champion, enemy, bucket, profile) {
+  if (!items.length) {
+    return `<section class="info-card"><h3>${title}</h3><p>この条件では明確な候補を絞れません。ショップでは${profile.stats.join("・")}を優先して確認してください。</p></section>`;
+  }
+  return `<section class="info-card"><h3>${title}</h3><div class="item-grid">${items
+    .map((item) => assetChip(itemIcon(item), item.name, `${item.gold.total}G: ${itemReasonByProfile(item, champion, enemy, bucket, profile)}`))
+    .join("")}</div></section>`;
+}
+
+function renderItemGroups(groups, champion, enemy) {
+  return [
+    renderItemGroup("コア候補", groups.core, champion, enemy, "core", groups.profile),
+    renderItemGroup("対面に合わせる防御候補", groups.defense, champion, enemy, "defense", groups.profile),
+    renderItemGroup("状況対応候補", groups.situational, champion, enemy, "situational", groups.profile),
+  ].join("");
+}
+
+function itemPlanByProfile(champion, enemy, detail) {
+  const profile = championItemProfile(champion);
+  const spell = pokeSpell(detail)?.name || "主力スキル";
+  const enemyDamage = enemy ? damageProfile(enemy) : "";
+  const core = `${champion.name}は${profile.label}として見ます。${profile.core} ${spell}や通常攻撃で勝つ形に合うステータスだけを候補化し、サポート専用・逆ダメージ系・削除済みアイテムを混ぜないようにしています。`;
+  const counter = enemy
+    ? `${enemy.name}は${enemyDamage}です。レーンで先に倒されるなら、完成火力を急ぐ前に${enemyDamage === "AP寄り" ? "魔法防御" : enemyDamage === "AD寄り" ? "物理防御" : "体力と両防御"}を含む候補を見ます。`
+    : "対面を選ぶと、AD/AP傾向に合わせた防御候補を切り替えます。";
+  const behind = "負けている時は高額完成品を無理に急がず、次の戦闘で死なない中間素材、靴、視界、対回復/対シールドなど目的が明確な買い物を優先します。";
+  return { stats: profile.stats, core, counter, behind };
+}
+
 function laneAdvice(champion, lane, detail) {
   const type = archetype(champion);
   const profile = rangeProfile(champion);
@@ -589,10 +822,10 @@ async function renderDetail() {
   const selectedLane = state.activeLane === "ALL" ? lanes[0] : state.activeLane;
   const rune = runeAdvice(champion, detail);
   const runes = currentKeystones(champion);
-  const items = findItemsFor(champion);
+  const itemGroups = findItemGroups(champion, selectedEnemy);
   const matchup = selectedEnemy ? matchupAdvice(champion, selectedEnemy, selectedLane, detail, enemyDetail) : null;
   const manualArticle = selectedEnemy ? manualMatchupFor(champion.id, selectedEnemy.id, selectedLane) : null;
-  const plan = itemPlan(champion, selectedEnemy, detail);
+  const plan = itemPlanByProfile(champion, selectedEnemy, detail);
   const spells = detail?.spells || [];
   const passiveText = stripHtml(detail?.passive?.description || "").slice(0, 150);
 
@@ -601,9 +834,7 @@ async function renderDetail() {
     ...spells.map((spell, index) => `<section class="info-card"><h3>${["Q", "W", "E", "R"][index]}: ${spell.name}</h3><p>${spellText(spell)}</p></section>`),
   ].join("");
 
-  const itemCards = items
-    .map((item) => assetChip(itemIcon(item), item.name, `${item.gold.total}G: ${itemReason(item, champion, selectedEnemy)}`))
-    .join("");
+  const itemCards = renderItemGroups(itemGroups, champion, selectedEnemy);
 
   const bodies = {
     overview: `
@@ -627,9 +858,9 @@ async function renderDetail() {
         <section class="info-card"><h3>購入理由</h3><p>${plan.core}</p><p>${plan.counter}</p></section>
         <section class="info-card"><h3>負けている時</h3><p>${plan.behind}</p></section>
         <section class="info-card"><h3>見るステータス</h3><ul>${plan.stats.map((stat) => `<li>${stat}</li>`).join("")}</ul></section>
-        <section class="info-card"><h3>混入防止</h3><p>候補アイテムは現在読み込んだData Dragonの購入可能アイテムだけです。削除済みアイテム名を手書き表示しません。</p></section>
+        <section class="info-card"><h3>混入防止</h3><p>候補アイテムは現在読み込んだData Dragonの購入可能アイテムだけです。削除済みアイテム名を手書き表示せず、チャンピオンの型に合わないサポート専用・逆ダメージ系・防御専用候補も除外します。</p></section>
       </div>
-      <section class="info-card"><h3>候補アイテムと理由</h3><div class="item-grid">${itemCards}</div></section>
+      <div class="card-grid">${itemCards}</div>
     `,
     laning: `
       <section class="info-card"><h3>${laneNames[selectedLane]}での${champion.name}の動き</h3><ol>${laneAdvice(champion, selectedLane, detail).map((line) => `<li>${line}</li>`).join("")}</ol></section>
