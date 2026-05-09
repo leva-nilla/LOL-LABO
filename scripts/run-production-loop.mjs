@@ -17,6 +17,11 @@ function run(command, args) {
   });
 }
 
+async function mergeAndValidate() {
+  await run("node", ["scripts/merge-produced-articles.mjs"]);
+  await run("node", ["scripts/validate-matchup-articles.mjs"]);
+}
+
 async function status() {
   const queue = JSON.parse(await fs.readFile("data/matchup-queue.json", "utf8"));
   const manual = JSON.parse(await fs.readFile("data/manual-matchups.json", "utf8"));
@@ -30,17 +35,30 @@ async function status() {
 
 const batchSize = Number(argValue("--batch-size", "25"));
 const maxBatches = Number(argValue("--max-batches", "1"));
+const maxMinutes = Number(argValue("--max-minutes", "0"));
+const startedAt = Date.now();
 
 for (let batch = 1; batch <= maxBatches; batch += 1) {
+  if (maxMinutes > 0 && Date.now() - startedAt >= maxMinutes * 60 * 1000) {
+    console.log(`time limit reached after ${maxMinutes} minute(s)`);
+    break;
+  }
   const before = await status();
   if (before.remaining === 0) {
     console.log("production complete");
     break;
   }
   console.log(`batch ${batch}/${maxBatches}: ${before.written}/${before.target} written, ${before.remaining} remaining`);
-  await run("node", ["scripts/produce-matchup-batch.mjs", "--limit", String(batchSize), "--execute"]);
-  await run("node", ["scripts/merge-produced-articles.mjs"]);
-  await run("node", ["scripts/validate-matchup-articles.mjs"]);
+  try {
+    await run("node", ["scripts/produce-matchup-batch.mjs", "--limit", String(batchSize), "--execute"]);
+  } catch (error) {
+    console.error(error.message);
+    console.error("production batch stopped early; merging completed article files before exiting");
+    await mergeAndValidate();
+    process.exitCode = 1;
+    break;
+  }
+  await mergeAndValidate();
 }
 
 const after = await status();
