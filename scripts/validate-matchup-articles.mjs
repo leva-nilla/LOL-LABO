@@ -42,7 +42,13 @@ function runeContext(runes) {
   return { paths, keystones };
 }
 
-function assertArticle(article, ids, queueIds, runeNames, errors) {
+function articleIdParts(id) {
+  const match = String(id).match(/^(.+)-vs-(.+)-([A-Z]+)$/);
+  if (!match) return undefined;
+  return { player: match[1], enemy: match[2], lane: match[3] };
+}
+
+function assertArticle(article, ids, queueIds, runeNames, championNames, errors) {
   for (const field of requiredStringFields) {
     if (!article[field] || typeof article[field] !== "string") errors.push(`${article.id || "unknown"} missing string field ${field}`);
   }
@@ -62,6 +68,15 @@ function assertArticle(article, ids, queueIds, runeNames, errors) {
     if (!Array.isArray(article.skillshots?.[field]) || article.skillshots[field].length < 3) errors.push(`${article.id} needs 3 skillshots.${field}`);
   }
 
+  const parts = articleIdParts(article.id);
+  if (!parts) {
+    errors.push(`${article.id || "unknown"} has invalid id format`);
+  } else {
+    if (article.player !== parts.player) errors.push(`${article.id} player must be champion id ${parts.player}, got ${article.player}`);
+    if (article.enemy !== parts.enemy) errors.push(`${article.id} enemy must be champion id ${parts.enemy}, got ${article.enemy}`);
+    if (article.lane !== parts.lane) errors.push(`${article.id} lane must match id lane ${parts.lane}, got ${article.lane}`);
+  }
+
   if (article.player === article.enemy) errors.push(`${article.id} player and enemy are identical`);
   if (ids.has(article.id)) errors.push(`duplicate article id ${article.id}`);
   ids.add(article.id);
@@ -71,9 +86,16 @@ function assertArticle(article, ids, queueIds, runeNames, errors) {
   if (article.runes?.subPath && !runeNames.paths.has(article.runes.subPath)) errors.push(`${article.id} has unknown subPath: ${article.runes.subPath}`);
   if (article.runes?.keystone && !runeNames.keystones.has(article.runes.keystone)) errors.push(`${article.id} has unknown keystone: ${article.runes.keystone}`);
 
-  const text = collectText(article);
-  if (!text.includes(article.player) && !text.includes(article.enemy)) {
-    errors.push(`${article.id} is too generic: article text does not mention player or enemy id/name`);
+  if (parts) {
+    const text = collectText(article);
+    const playerName = championNames.get(parts.player) || parts.player;
+    const enemyName = championNames.get(parts.enemy) || parts.enemy;
+    if (!text.includes(parts.player) && !text.includes(playerName)) {
+      errors.push(`${article.id} is too generic: article text does not mention player`);
+    }
+    if (!text.includes(parts.enemy) && !text.includes(enemyName)) {
+      errors.push(`${article.id} is too generic: article text does not mention enemy`);
+    }
   }
 }
 
@@ -89,13 +111,15 @@ const patch = queue?.patch || manual.patch;
 if (!patch) throw new Error("cannot determine patch for article validation");
 
 const runes = await loadJson(`${DDRAGON_ROOT}/cdn/${patch}/data/ja_JP/runesReforged.json`);
+const champions = await loadJson(`${DDRAGON_ROOT}/cdn/${patch}/data/ja_JP/champion.json`);
 const runeNames = runeContext(runes);
+const championNames = new Map(Object.values(champions.data || {}).map((champion) => [champion.id, champion.name]));
 const queueIds = queue ? new Set(queue.entries.map((entry) => entry.id)) : undefined;
 const errors = [];
 const ids = new Set();
 const articles = Array.isArray(manual.articles) ? manual.articles : [];
 
-for (const article of articles) assertArticle(article, ids, queueIds, runeNames, errors);
+for (const article of articles) assertArticle(article, ids, queueIds, runeNames, championNames, errors);
 
 if (errors.length) {
   console.error(errors.map((error) => `- ${error}`).join("\n"));

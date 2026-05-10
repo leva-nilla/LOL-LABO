@@ -9,6 +9,7 @@ Write in Japanese. The output must be one valid JSON object only, with no Markdo
 - Do not invent removed items or removed runes.
 - Do not name a rune or item unless it is present in the provided current patch context.
 - If a concrete item name is risky or not in context, use stat-based wording instead.
+- The JSON `player`, `enemy`, and `lane` fields must exactly copy the values from Matchup Entry. Use champion ids there, not localized champion names.
 - Make the article specific to the exact player champion, enemy champion, and lane.
 - Avoid generic advice that could fit every matchup.
 - Explain why, not only what.

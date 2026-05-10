@@ -33,6 +33,12 @@ function validateArticleShape(article) {
   }
 }
 
+function idParts(id) {
+  const match = String(id).match(/^(.+)-vs-(.+)-([A-Z]+)$/);
+  if (!match) throw new Error(`${id || "unknown"} has invalid article id`);
+  return { player: match[1], enemy: match[2], lane: match[3] };
+}
+
 function reviewStatus(review) {
   if (!review) return "draft";
   return review.decision === "accept" ? "reviewed" : "draft";
@@ -57,8 +63,12 @@ for (const file of articleFiles) {
   const reviewPath = path.join(WORK_DIR, file.replace(".article.json", ".review.json"));
   const review = (await exists(reviewPath)) ? await readJson(reviewPath) : undefined;
   const status = reviewStatus(review);
+  const parts = idParts(article.id);
   const normalized = {
     ...article,
+    player: parts.player,
+    enemy: parts.enemy,
+    lane: parts.lane,
     status,
     updatedAt: article.updatedAt || new Date().toISOString().slice(0, 10)
   };
