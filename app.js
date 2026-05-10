@@ -654,11 +654,15 @@ function matchupAdvice(player, enemy, lane, playerDetail, enemyDetail) {
 }
 
 function manualMatchupFor(playerId, enemyId, lane) {
-  return state.manualMatchups.find((article) => {
+  const samePairArticles = state.manualMatchups.filter((article) => {
     const samePair = article.player === playerId && article.enemy === enemyId;
-    const sameLane = article.lane === lane || article.lane === "ALL";
-    return samePair && sameLane && article.status !== "archived";
+    return samePair && article.status !== "archived";
   });
+  return (
+    samePairArticles.find((article) => article.lane === lane) ||
+    samePairArticles.find((article) => article.lane === "ALL") ||
+    samePairArticles[0]
+  );
 }
 
 function manualCoverageText() {
