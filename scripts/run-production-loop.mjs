@@ -6,6 +6,10 @@ function argValue(name, fallback) {
   return index === -1 ? fallback : process.argv[index + 1];
 }
 
+function hasFlag(name) {
+  return process.argv.includes(name);
+}
+
 function run(command, args) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { stdio: "inherit" });
@@ -37,6 +41,7 @@ const batchSize = Number(argValue("--batch-size", "25"));
 const maxBatches = Number(argValue("--max-batches", "1"));
 const maxMinutes = Number(argValue("--max-minutes", "0"));
 const concurrency = Math.max(1, Number(argValue("--concurrency", "1")));
+const skipReview = hasFlag("--skip-review");
 const startedAt = Date.now();
 
 for (let batch = 1; batch <= maxBatches; batch += 1) {
@@ -51,14 +56,16 @@ for (let batch = 1; batch <= maxBatches; batch += 1) {
   }
   console.log(`batch ${batch}/${maxBatches}: ${before.written}/${before.target} written, ${before.remaining} remaining`);
   try {
-    await run("node", [
+    const produceArgs = [
       "scripts/produce-matchup-batch.mjs",
       "--limit",
       String(batchSize),
       "--execute",
       "--concurrency",
       String(concurrency)
-    ]);
+    ];
+    if (skipReview) produceArgs.push("--skip-review");
+    await run("node", produceArgs);
   } catch (error) {
     console.error(error.message);
     console.error("production batch stopped early; merging completed article files before exiting");

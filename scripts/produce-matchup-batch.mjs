@@ -166,6 +166,7 @@ const limit = Number(argValue("--limit", "10"));
 const concurrency = Math.max(1, Number(argValue("--concurrency", "1")));
 const dryRun = hasFlag("--dry-run");
 const execute = hasFlag("--execute");
+const skipReview = hasFlag("--skip-review");
 const queue = await readJson(QUEUE_PATH);
 const manual = await readJson(MANUAL_PATH);
 const writerBase = await fs.readFile("prompts/codex-writer.md", "utf8");
@@ -216,6 +217,11 @@ async function produceEntry(entry) {
   }
   const article = tryParseJson(await fs.readFile(articlePath, "utf8"));
   await fs.writeFile(articlePath, `${JSON.stringify(article, null, 2)}\n`, "utf8");
+
+  if (skipReview) {
+    console.log(`wrote ${articlePath}: review skipped`);
+    return;
+  }
 
   const reviewerPrompt = buildReviewerPrompt({ basePrompt: reviewerBase, article, runes: currentRunes, items: currentItems });
   const reviewerPromptPath = path.join(OUT_DIR, `${entry.id}.reviewer.md`);
