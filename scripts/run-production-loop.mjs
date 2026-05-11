@@ -36,6 +36,7 @@ async function status() {
 const batchSize = Number(argValue("--batch-size", "25"));
 const maxBatches = Number(argValue("--max-batches", "1"));
 const maxMinutes = Number(argValue("--max-minutes", "0"));
+const concurrency = Math.max(1, Number(argValue("--concurrency", "1")));
 const startedAt = Date.now();
 
 for (let batch = 1; batch <= maxBatches; batch += 1) {
@@ -50,7 +51,14 @@ for (let batch = 1; batch <= maxBatches; batch += 1) {
   }
   console.log(`batch ${batch}/${maxBatches}: ${before.written}/${before.target} written, ${before.remaining} remaining`);
   try {
-    await run("node", ["scripts/produce-matchup-batch.mjs", "--limit", String(batchSize), "--execute"]);
+    await run("node", [
+      "scripts/produce-matchup-batch.mjs",
+      "--limit",
+      String(batchSize),
+      "--execute",
+      "--concurrency",
+      String(concurrency)
+    ]);
   } catch (error) {
     console.error(error.message);
     console.error("production batch stopped early; merging completed article files before exiting");

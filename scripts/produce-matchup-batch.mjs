@@ -163,6 +163,7 @@ function tryParseJson(text) {
 }
 
 const limit = Number(argValue("--limit", "10"));
+const concurrency = Math.max(1, Number(argValue("--concurrency", "1")));
 const dryRun = hasFlag("--dry-run");
 const execute = hasFlag("--execute");
 const queue = await readJson(QUEUE_PATH);
@@ -186,7 +187,7 @@ const codexParts = commandParts(
 );
 const geminiParts = commandParts("GEMINI_CLI_CMD", "npx.cmd -y @google/gemini-cli");
 
-for (const entry of entries) {
+async function produceEntry(entry) {
   const playerDetail = await championDetail(queue.patch, entry.player);
   const enemyDetail = await championDetail(queue.patch, entry.enemy);
   const writerPrompt = buildWriterPrompt({
@@ -205,7 +206,7 @@ for (const entry of entries) {
     console.log(`prepared ${entry.id}`);
     console.log(`  writer prompt: ${writerPromptPath}`);
     console.log(`  codex command: ${codexParts.join(" ")} - < ${writerPromptPath}`);
-    continue;
+    return;
   }
 
   const articlePath = path.join(OUT_DIR, `${entry.id}.article.json`);
@@ -234,3 +235,25 @@ for (const entry of entries) {
   }
   console.log(`wrote ${articlePath} and ${reviewPath}: ${review.decision}`);
 }
+
+let cursor = 0;
+let firstError;
+const workerCount = Math.min(concurrency, entries.length);
+console.log(`processing ${entries.length} entries with concurrency ${workerCount}`);
+
+async function worker() {
+  while (!firstError) {
+    const entry = entries[cursor];
+    cursor += 1;
+    if (!entry) return;
+    try {
+      await produceEntry(entry);
+    } catch (error) {
+      firstError = error;
+      return;
+    }
+  }
+}
+
+await Promise.all(Array.from({ length: workerCount }, () => worker()));
+if (firstError) throw firstError;
