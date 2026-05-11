@@ -143,9 +143,17 @@ function buildReviewerPrompt({ basePrompt, article, runes, items }) {
   ].join("\n");
 }
 
-function nextQueued(queue, manual, limit) {
+function csvArg(name) {
+  const raw = argValue(name, "");
+  return raw ? new Set(raw.split(",").map((value) => value.trim()).filter(Boolean)) : undefined;
+}
+
+function nextQueued(queue, manual, limit, players) {
   const written = new Set((manual.articles || []).map((article) => article.id));
-  return queue.entries.filter((entry) => !written.has(entry.id)).slice(0, limit);
+  return queue.entries
+    .filter((entry) => !written.has(entry.id))
+    .filter((entry) => !players || players.has(entry.player))
+    .slice(0, limit);
 }
 
 function tryParseJson(text) {
@@ -167,11 +175,12 @@ const concurrency = Math.max(1, Number(argValue("--concurrency", "1")));
 const dryRun = hasFlag("--dry-run");
 const execute = hasFlag("--execute");
 const skipReview = hasFlag("--skip-review");
+const players = csvArg("--players");
 const queue = await readJson(QUEUE_PATH);
 const manual = await readJson(MANUAL_PATH);
 const writerBase = await fs.readFile("prompts/codex-writer.md", "utf8");
 const reviewerBase = await fs.readFile("prompts/gemini-reviewer.md", "utf8");
-const entries = nextQueued(queue, manual, limit);
+const entries = nextQueued(queue, manual, limit, players);
 const currentRunes = await loadJson(`${DDRAGON_ROOT}/cdn/${queue.patch}/data/ja_JP/runesReforged.json`);
 const currentItems = await loadJson(`${DDRAGON_ROOT}/cdn/${queue.patch}/data/ja_JP/item.json`);
 
