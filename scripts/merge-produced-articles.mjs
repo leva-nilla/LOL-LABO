@@ -45,6 +45,7 @@ function reviewStatus(review) {
 }
 
 const dryRun = hasFlag("--dry-run");
+const publishUnreviewed = hasFlag("--publish-unreviewed");
 const onlyId = argValue("--id", "");
 const manual = await readJson(MANUAL_PATH);
 const byId = new Map((manual.articles || []).map((article) => [article.id, article]));
@@ -62,7 +63,7 @@ for (const file of articleFiles) {
   validateArticleShape(article);
   const reviewPath = path.join(WORK_DIR, file.replace(".article.json", ".review.json"));
   const review = (await exists(reviewPath)) ? await readJson(reviewPath) : undefined;
-  const status = reviewStatus(review);
+  const status = publishUnreviewed ? "reviewed" : reviewStatus(review);
   const parts = idParts(article.id);
   const normalized = {
     ...article,

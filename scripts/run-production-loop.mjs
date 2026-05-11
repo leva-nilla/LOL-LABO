@@ -22,7 +22,9 @@ function run(command, args) {
 }
 
 async function mergeAndValidate() {
-  await run("node", ["scripts/merge-produced-articles.mjs"]);
+  const mergeArgs = ["scripts/merge-produced-articles.mjs"];
+  if (publishUnreviewed) mergeArgs.push("--publish-unreviewed");
+  await run("node", mergeArgs);
   await run("node", ["scripts/validate-matchup-articles.mjs"]);
 }
 
@@ -42,6 +44,7 @@ const maxBatches = Number(argValue("--max-batches", "1"));
 const maxMinutes = Number(argValue("--max-minutes", "0"));
 const concurrency = Math.max(1, Number(argValue("--concurrency", "1")));
 const skipReview = hasFlag("--skip-review");
+const publishUnreviewed = hasFlag("--publish-unreviewed");
 const startedAt = Date.now();
 
 for (let batch = 1; batch <= maxBatches; batch += 1) {
