@@ -19,7 +19,7 @@
 
         <div class="search-block">
           <label for="championSearch">チャンピオン検索</label>
-          <input id="championSearch" type="search" placeholder="例: Ahri / アーリ" autocomplete="off" />
+          <input id="championSearch" type="search" placeholder="例: Ahri / アーリ / あーり / aari" autocomplete="off" />
         </div>
 
         <div class="filter-block">
@@ -51,17 +51,18 @@
           <div class="duel-grid">
             <label>
               使用キャラ
-              <select id="playerChampion"></select>
+              <input id="playerChampion" type="search" list="championOptions" placeholder="例: Ahri / あーり / aari" autocomplete="off" />
             </label>
             <label>
               対面
-              <select id="enemyChampion"></select>
+              <input id="enemyChampion" type="search" list="championOptions" placeholder="例: Aatrox / えいとろっくす / eitorokkusu" autocomplete="off" />
             </label>
             <label>
               レーン
               <select id="matchupLane"></select>
             </label>
           </div>
+          <datalist id="championOptions"></datalist>
           <div class="matchup-result" id="matchupResult"></div>
         </section>
 

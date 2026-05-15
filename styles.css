@@ -124,6 +124,11 @@ select:focus {
   box-shadow: 0 0 0 3px rgba(71, 199, 185, 0.14);
 }
 
+input.invalid {
+  border-color: var(--red);
+  box-shadow: 0 0 0 3px rgba(232, 111, 104, 0.16);
+}
+
 .segmented,
 .nav-list {
   display: grid;

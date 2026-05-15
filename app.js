@@ -27,6 +27,7 @@ const state = {
   items: [],
   runes: [],
   selectedChampionId: "",
+  selectedEnemyId: "",
   activeLane: "ALL",
   activeTopic: "overview",
   query: "",
@@ -44,6 +45,7 @@ const els = {
   championDetail: document.querySelector("#championDetail"),
   playerChampion: document.querySelector("#playerChampion"),
   enemyChampion: document.querySelector("#enemyChampion"),
+  championOptions: document.querySelector("#championOptions"),
   matchupLane: document.querySelector("#matchupLane"),
   matchupResult: document.querySelector("#matchupResult"),
   swapMatchup: document.querySelector("#swapMatchup"),
@@ -55,8 +57,155 @@ function stripHtml(text = "") {
   return div.textContent || div.innerText || "";
 }
 
-function normalize(text) {
-  return String(text).toLowerCase().replace(/\s+/g, "");
+function kanaToHiragana(text) {
+  return String(text).replace(/[\u30a1-\u30f6]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0x60));
+}
+
+const kanaRomajiMap = {
+  あ: "a", い: "i", う: "u", え: "e", お: "o",
+  か: "ka", き: "ki", く: "ku", け: "ke", こ: "ko",
+  さ: "sa", し: "shi", す: "su", せ: "se", そ: "so",
+  た: "ta", ち: "chi", つ: "tsu", て: "te", と: "to",
+  な: "na", に: "ni", ぬ: "nu", ね: "ne", の: "no",
+  は: "ha", ひ: "hi", ふ: "fu", へ: "he", ほ: "ho",
+  ま: "ma", み: "mi", む: "mu", め: "me", も: "mo",
+  や: "ya", ゆ: "yu", よ: "yo",
+  ら: "ra", り: "ri", る: "ru", れ: "re", ろ: "ro",
+  わ: "wa", を: "o", ん: "n",
+  が: "ga", ぎ: "gi", ぐ: "gu", げ: "ge", ご: "go",
+  ざ: "za", じ: "ji", ず: "zu", ぜ: "ze", ぞ: "zo",
+  だ: "da", ぢ: "ji", づ: "zu", で: "de", ど: "do",
+  ば: "ba", び: "bi", ぶ: "bu", べ: "be", ぼ: "bo",
+  ぱ: "pa", ぴ: "pi", ぷ: "pu", ぺ: "pe", ぽ: "po", ゔ: "vu",
+  ぁ: "a", ぃ: "i", ぅ: "u", ぇ: "e", ぉ: "o",
+  ゃ: "ya", ゅ: "yu", ょ: "yo", ゎ: "wa",
+};
+
+const kanaDigraphRomajiMap = {
+  きゃ: "kya", きゅ: "kyu", きょ: "kyo",
+  しゃ: "sha", しゅ: "shu", しょ: "sho",
+  ちゃ: "cha", ちゅ: "chu", ちょ: "cho",
+  にゃ: "nya", にゅ: "nyu", にょ: "nyo",
+  ひゃ: "hya", ひゅ: "hyu", ひょ: "hyo",
+  みゃ: "mya", みゅ: "myu", みょ: "myo",
+  りゃ: "rya", りゅ: "ryu", りょ: "ryo",
+  ぎゃ: "gya", ぎゅ: "gyu", ぎょ: "gyo",
+  じゃ: "ja", じゅ: "ju", じょ: "jo",
+  びゃ: "bya", びゅ: "byu", びょ: "byo",
+  ぴゃ: "pya", ぴゅ: "pyu", ぴょ: "pyo",
+  しぇ: "she", じぇ: "je", ちぇ: "che",
+  てぃ: "ti", でぃ: "di", とぅ: "tu", どぅ: "du",
+  ふぁ: "fa", ふぃ: "fi", ふぇ: "fe", ふぉ: "fo",
+  うぃ: "wi", うぇ: "we", うぉ: "wo",
+  ゔぁ: "va", ゔぃ: "vi", ゔぇ: "ve", ゔぉ: "vo", ゔゅ: "vyu",
+};
+
+function kanaToRomaji(text) {
+  const kana = kanaToHiragana(text);
+  let result = "";
+  for (let index = 0; index < kana.length; index += 1) {
+    const char = kana[index];
+    if (char === "っ") {
+      const nextPair = kanaDigraphRomajiMap[kana.slice(index + 1, index + 3)];
+      const nextSingle = kanaRomajiMap[kana[index + 1]];
+      const next = nextPair || nextSingle || "";
+      if (next) result += next[0];
+      continue;
+    }
+    if (char === "ー") {
+      const lastVowel = result.match(/[aiueo](?!.*[aiueo])/);
+      if (lastVowel) result += lastVowel[0];
+      continue;
+    }
+    const pair = kana.slice(index, index + 2);
+    if (kanaDigraphRomajiMap[pair]) {
+      result += kanaDigraphRomajiMap[pair];
+      index += 1;
+      continue;
+    }
+    result += kanaRomajiMap[char] || char;
+  }
+  return result;
+}
+
+function romajiSearchVariants(text) {
+  const base = kanaToRomaji(text);
+  const variants = new Set([base]);
+  variants.add(base.replace(/fu/g, "hu"));
+  variants.add(base.replace(/hu/g, "fu"));
+
+  const kana = kanaToHiragana(text);
+  let repeated = "";
+  let omitted = "";
+  let hyphenated = "";
+  for (let index = 0; index < kana.length; index += 1) {
+    const char = kana[index];
+    if (char === "ー") {
+      const lastVowel = repeated.match(/[aiueo](?!.*[aiueo])/);
+      if (lastVowel) {
+        repeated += lastVowel[0];
+        hyphenated += "-";
+      }
+      continue;
+    }
+    const pair = kana.slice(index, index + 2);
+    let chunk = "";
+    if (char === "っ") {
+      const nextPair = kanaDigraphRomajiMap[kana.slice(index + 1, index + 3)];
+      const nextSingle = kanaRomajiMap[kana[index + 1]];
+      const next = nextPair || nextSingle || "";
+      chunk = next ? next[0] : "";
+    } else if (kanaDigraphRomajiMap[pair]) {
+      chunk = kanaDigraphRomajiMap[pair];
+      index += 1;
+    } else {
+      chunk = kanaRomajiMap[char] || char;
+    }
+    repeated += chunk;
+    omitted += chunk;
+    hyphenated += chunk;
+  }
+  [repeated, omitted, hyphenated].forEach((variant) => {
+    if (!variant) return;
+    variants.add(variant);
+    variants.add(variant.replace(/fu/g, "hu"));
+    variants.add(variant.replace(/hu/g, "fu"));
+  });
+  return [...variants];
+}
+
+function normalizeSearch(text) {
+  return kanaToHiragana(String(text).normalize("NFKC").toLowerCase())
+    .replace(/[\s'’.\-_]/g, "");
+}
+
+function championLabel(champion) {
+  return `${champion.name} / ${champion.id}`;
+}
+
+function championSearchValues(champion) {
+  const hiraganaName = kanaToHiragana(champion.name);
+  const romajiNames = romajiSearchVariants(champion.name);
+  return [champion.id, champion.name, hiraganaName, ...romajiNames, champion.title, championLabel(champion), championOptionValue(champion)];
+}
+
+function championSearchText(champion) {
+  return championSearchValues(champion).map(normalizeSearch).join("");
+}
+
+function resolveChampionInput(value) {
+  const q = normalizeSearch(value);
+  if (!q) return undefined;
+  return state.champions.find((champion) => championSearchValues(champion).some((entry) => normalizeSearch(entry) === q));
+}
+
+function setChampionInput(input, champion, valid = true) {
+  if (champion) input.value = championLabel(champion);
+  input.classList.toggle("invalid", !valid);
+}
+
+function championOptionValue(champion) {
+  return [...new Set([championLabel(champion), kanaToHiragana(champion.name), ...romajiSearchVariants(champion.name)])].join(" / ");
 }
 
 function championIcon(champion) {
@@ -725,8 +874,8 @@ function beginnerKnowledge(champion, detail) {
 function filteredChampions() {
   return state.champions.filter((champion) => {
     const matchesLane = state.activeLane === "ALL" || inferLanes(champion).includes(state.activeLane);
-    const q = normalize(state.query);
-    const matchesQuery = !q || normalize(`${champion.id}${champion.name}${champion.title}`).includes(q);
+    const q = normalizeSearch(state.query);
+    const matchesQuery = !q || championSearchText(champion).includes(q);
     return matchesLane && matchesQuery;
   });
 }
@@ -759,21 +908,25 @@ function renderChampionList() {
     .join("");
 }
 
-function renderSelects() {
-  const options = state.champions.map((champion) => `<option value="${champion.id}">${champion.name}</option>`).join("");
-  els.playerChampion.innerHTML = options;
-  els.enemyChampion.innerHTML = options;
+function renderMatchupInputs() {
+  els.championOptions.innerHTML = state.champions
+    .map((champion) => `<option value="${championOptionValue(champion)}" label="${championLabel(champion)}"></option>`)
+    .join("");
   els.matchupLane.innerHTML = LANES.filter((lane) => lane !== "ALL")
     .map((lane) => `<option value="${lane}">${laneNames[lane]}</option>`)
     .join("");
-  els.playerChampion.value = state.selectedChampionId || state.champions[0]?.id;
-  els.enemyChampion.value = state.champions.find((champion) => champion.id !== els.playerChampion.value)?.id || state.champions[0]?.id;
-  els.matchupLane.value = inferLanes(getChampion(els.playerChampion.value))[0] || "MID";
+  const player = getChampion(state.selectedChampionId) || state.champions[0];
+  const enemy = getChampion(state.selectedEnemyId) || state.champions.find((champion) => champion.id !== player?.id) || state.champions[0];
+  state.selectedChampionId = player?.id || "";
+  state.selectedEnemyId = enemy?.id || "";
+  setChampionInput(els.playerChampion, player);
+  setChampionInput(els.enemyChampion, enemy);
+  els.matchupLane.value = inferLanes(player)[0] || "MID";
 }
 
 async function renderMatchup() {
-  const player = getChampion(els.playerChampion.value);
-  const enemy = getChampion(els.enemyChampion.value);
+  const player = getChampion(state.selectedChampionId);
+  const enemy = getChampion(state.selectedEnemyId);
   if (!player || !enemy) return;
   const lane = els.matchupLane.value;
   const [playerDetail, enemyDetail] = await Promise.all([loadChampionDetail(player.id), loadChampionDetail(enemy.id)]);
@@ -815,7 +968,7 @@ async function renderDetail() {
   const token = ++state.detailRenderToken;
   renderLoadingDetail(champion);
 
-  const selectedEnemy = getChampion(els.enemyChampion.value) || state.champions.find((c) => c.id !== champion.id);
+  const selectedEnemy = getChampion(state.selectedEnemyId) || state.champions.find((c) => c.id !== champion.id);
   const [detail, enemyDetail] = await Promise.all([
     loadChampionDetail(champion.id),
     selectedEnemy ? loadChampionDetail(selectedEnemy.id) : Promise.resolve(undefined),
@@ -940,7 +1093,7 @@ function bindEvents() {
     const id = event.target.closest("button")?.dataset.champion;
     if (!id) return;
     state.selectedChampionId = id;
-    els.playerChampion.value = id;
+    setChampionInput(els.playerChampion, getChampion(id));
     renderChampionList();
     renderDetail();
     renderMatchup();
@@ -952,19 +1105,54 @@ function bindEvents() {
     renderFilters();
     renderDetail();
   });
-  [els.playerChampion, els.enemyChampion, els.matchupLane].forEach((el) => {
-    el.addEventListener("change", () => {
-      if (el === els.playerChampion) state.selectedChampionId = els.playerChampion.value;
-      renderChampionList();
+  function commitChampionInput(input, stateKey) {
+    const champion = resolveChampionInput(input.value);
+    if (!champion) {
+      input.classList.add("invalid");
+      return false;
+    }
+    state[stateKey] = champion.id;
+    setChampionInput(input, champion);
+    if (stateKey === "selectedChampionId") renderChampionList();
+    renderDetail();
+    renderMatchup();
+    return true;
+  }
+
+  [
+    { input: els.playerChampion, stateKey: "selectedChampionId" },
+    { input: els.enemyChampion, stateKey: "selectedEnemyId" },
+  ].forEach(({ input, stateKey }) => {
+    input.addEventListener("focus", () => {
+      input.select();
+    });
+    input.addEventListener("change", () => {
+      commitChampionInput(input, stateKey);
+    });
+    input.addEventListener("blur", () => {
+      if (input.value) commitChampionInput(input, stateKey);
+    });
+    input.addEventListener("input", () => {
+      const champion = resolveChampionInput(input.value);
+      input.classList.toggle("invalid", Boolean(input.value) && !champion);
+      if (!champion || state[stateKey] === champion.id) return;
+      state[stateKey] = champion.id;
+      setChampionInput(input, champion);
+      if (stateKey === "selectedChampionId") renderChampionList();
       renderDetail();
       renderMatchup();
     });
   });
+  els.matchupLane.addEventListener("change", () => {
+    renderDetail();
+    renderMatchup();
+  });
   els.swapMatchup.addEventListener("click", () => {
-    const player = els.playerChampion.value;
-    els.playerChampion.value = els.enemyChampion.value;
-    els.enemyChampion.value = player;
-    state.selectedChampionId = els.playerChampion.value;
+    const playerId = state.selectedChampionId;
+    state.selectedChampionId = state.selectedEnemyId;
+    state.selectedEnemyId = playerId;
+    setChampionInput(els.playerChampion, getChampion(state.selectedChampionId));
+    setChampionInput(els.enemyChampion, getChampion(state.selectedEnemyId));
     renderChampionList();
     renderDetail();
     renderMatchup();
@@ -988,7 +1176,8 @@ async function init() {
     state.items = Object.values(itemData.data).filter((item) => mapLegalItem(item));
     state.runes = runeData;
     state.selectedChampionId = state.champions[0]?.id || "";
-    renderSelects();
+    state.selectedEnemyId = state.champions.find((champion) => champion.id !== state.selectedChampionId)?.id || "";
+    renderMatchupInputs();
     renderChampionList();
     renderDetail();
     renderMatchup();
