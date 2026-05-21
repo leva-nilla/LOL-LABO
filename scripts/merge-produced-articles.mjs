@@ -1,8 +1,9 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { readArticleStore, writeShardedArticleStore } from "./matchup-article-store.mjs";
 
 const WORK_DIR = "work/matchup-production";
-const MANUAL_PATH = "data/manual-matchups.json";
+const QUEUE_PATH = "data/matchup-queue.json";
 
 function argValue(name, fallback) {
   const index = process.argv.indexOf(name);
@@ -47,8 +48,9 @@ function reviewStatus(review) {
 const dryRun = hasFlag("--dry-run");
 const publishUnreviewed = hasFlag("--publish-unreviewed");
 const onlyId = argValue("--id", "");
-const manual = await readJson(MANUAL_PATH);
-const byId = new Map((manual.articles || []).map((article) => [article.id, article]));
+const queue = await readJson(QUEUE_PATH);
+const store = await readArticleStore();
+const byId = new Map((store.articles || []).map((article) => [article.id, article]));
 const files = await fs.readdir(WORK_DIR);
 const articleFiles = files
   .filter((file) => file.endsWith(".article.json"))
@@ -82,13 +84,14 @@ for (const file of articleFiles) {
   merged += 1;
 }
 
-const next = {
-  ...manual,
-  articles: [...byId.values()].sort((a, b) => a.id.localeCompare(b.id))
-};
+const nextArticles = [...byId.values()].sort((a, b) => a.id.localeCompare(b.id));
 
 if (!dryRun) {
-  await fs.writeFile(MANUAL_PATH, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+  await writeShardedArticleStore({
+    articles: nextArticles,
+    patch: queue.patch,
+    targetArticleCount: queue.targetArticleCount
+  });
 }
 
 console.log(`${dryRun ? "would merge" : "merged"} ${merged} article(s), skipped ${skipped}`);

@@ -1,9 +1,9 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { readArticleIndex } from "./matchup-article-store.mjs";
 
 const QUEUE_PATH = "data/matchup-queue.json";
-const MANUAL_PATH = "data/manual-matchups.json";
 const OUT_DIR = "work/matchup-production";
 const DDRAGON_ROOT = "https://ddragon.leagueoflegends.com";
 
@@ -149,7 +149,7 @@ function csvArg(name) {
 }
 
 function nextQueued(queue, manual, limit, players) {
-  const written = new Set((manual.articles || []).map((article) => article.id));
+  const written = new Set((manual.entries || []).map((article) => article.id));
   return queue.entries
     .filter((entry) => !written.has(entry.id))
     .filter((entry) => !players || players.has(entry.player))
@@ -177,7 +177,7 @@ const execute = hasFlag("--execute");
 const skipReview = hasFlag("--skip-review");
 const players = csvArg("--players");
 const queue = await readJson(QUEUE_PATH);
-const manual = await readJson(MANUAL_PATH);
+const manual = await readArticleIndex();
 const writerBase = await fs.readFile("prompts/codex-writer.md", "utf8");
 const reviewerBase = await fs.readFile("prompts/gemini-reviewer.md", "utf8");
 const entries = nextQueued(queue, manual, limit, players);

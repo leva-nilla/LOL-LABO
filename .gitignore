@@ -1,4 +1,6 @@
 work/
+_site/
+.playwright-cli/
 server.err.log
 server.out.log
 node_modules/

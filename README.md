@@ -18,7 +18,7 @@ http://127.0.0.1:5173
 
 URLだけで共有したい場合はGitHub Pagesなどの静的ホスティングに公開します。詳しくは [docs/share-with-friends.md](./docs/share-with-friends.md) を参照してください。
 
-公開後、友人がURLを開くたびにチャンピオン、アイテム、ルーン、画像はRiot Data Dragonから最新パッチを取得します。手書き対面記事は `data/manual-matchups.json` を更新してpushした時点で反映されます。
+公開後、友人がURLを開くたびにチャンピオン、アイテム、ルーン、画像はRiot Data Dragonから最新パッチを取得します。手書き対面記事は `data/manual-matchups/` 配下の分割JSONを更新してpushした時点で反映されます。
 
 ## データ
 
@@ -34,7 +34,7 @@ URLだけで共有したい場合はGitHub Pagesなどの静的ホスティン�
 - 使用キャラと対面キャラを選んだ有利条件、購入基準、ウェーブ判断、スキルショット/ドッジ対応の表示
 - 172 x 171 の全対面に対して、射程、クラス、ダメージ傾向、レーン適性、個別スキル名から初心者向け解説を生成
 - 個別チャンピオンJSONを読み込み、パッシブ、Q/W/E/Rを使った攻略メモを表示
-- `data/manual-matchups.json` に手書き攻略記事を追加すると、その対面では生成文より記事本文を優先表示
+- `data/manual-matchups/` の分割記事に手書き攻略記事を追加すると、その対面では生成文より記事本文を優先表示
 - メインパス、サブパス、シャードまで含めたルーン選択基準
 - ルーン名とアイテム名は最新Data Dragonに存在するものだけ表示
 - 初心者が覚えるべきCS、視界、リコール、デス回避、オブジェクト前行動のチェックリスト
@@ -46,7 +46,7 @@ URLだけで共有したい場合はGitHub Pagesなどの静的ホスティン�
 
 ## 手書き攻略の追加
 
-執筆済み記事は [data/manual-matchups.json](./data/manual-matchups.json) に追加します。フォーマットと執筆基準は [docs/matchup-authoring.md](./docs/matchup-authoring.md) を参照してください。
+執筆済み記事は `data/manual-matchups/articles/` に分割保存します。フォーマットと執筆基準は [docs/matchup-authoring.md](./docs/matchup-authoring.md) を参照してください。
 
 現在のサンプル記事:
 

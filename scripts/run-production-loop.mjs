@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
+import { readArticleIndex } from "./matchup-article-store.mjs";
 
 function argValue(name, fallback) {
   const index = process.argv.indexOf(name);
@@ -31,8 +32,8 @@ async function mergeAndValidate() {
 
 async function status() {
   const queue = JSON.parse(await fs.readFile("data/matchup-queue.json", "utf8"));
-  const manual = JSON.parse(await fs.readFile("data/manual-matchups.json", "utf8"));
-  const written = new Set((manual.articles || []).map((article) => article.id));
+  const manual = await readArticleIndex();
+  const written = new Set((manual.entries || []).map((article) => article.id));
   return {
     target: queue.targetArticleCount,
     written: written.size,

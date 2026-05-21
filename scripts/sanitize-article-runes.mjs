@@ -1,12 +1,7 @@
-import fs from "node:fs/promises";
+import { readArticleStore, readJson, writeShardedArticleStore } from "./matchup-article-store.mjs";
 
-const ARTICLE_PATH = "data/manual-matchups.json";
 const QUEUE_PATH = "data/matchup-queue.json";
 const DDRAGON_ROOT = "https://ddragon.leagueoflegends.com";
-
-async function readJson(path) {
-  return JSON.parse(await fs.readFile(path, "utf8"));
-}
 
 async function loadJson(url) {
   const response = await fetch(url);
@@ -21,14 +16,14 @@ function exactOrContained(value, validValues) {
   return matches.sort((a, b) => b.length - a.length)[0] || value;
 }
 
-const manual = await readJson(ARTICLE_PATH);
+const store = await readArticleStore();
 const queue = await readJson(QUEUE_PATH);
 const runes = await loadJson(`${DDRAGON_ROOT}/cdn/${queue.patch}/data/ja_JP/runesReforged.json`);
 const paths = new Set(runes.map((tree) => tree.name));
 const keystones = new Set(runes.flatMap((tree) => tree.slots?.[0]?.runes || []).map((rune) => rune.name));
 
 let changed = 0;
-for (const article of manual.articles || []) {
+for (const article of store.articles || []) {
   if (!article.runes) continue;
   for (const [field, validValues] of [
     ["keystone", keystones],
@@ -44,7 +39,11 @@ for (const article of manual.articles || []) {
 }
 
 if (changed) {
-  await fs.writeFile(ARTICLE_PATH, `${JSON.stringify(manual, null, 2)}\n`, "utf8");
+  await writeShardedArticleStore({
+    articles: store.articles,
+    patch: queue.patch,
+    targetArticleCount: queue.targetArticleCount
+  });
 }
 
 console.log(`sanitized ${changed} rune field(s)`);
