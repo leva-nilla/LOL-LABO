@@ -1,6 +1,6 @@
 # Matchup Production Pipeline
 
-This pipeline is designed to grow the sharded matchup article store toward 29,412 reviewed matchup articles. The small `data/manual-matchups.json` file points to `data/manual-matchups/index.json`; article bodies live under `data/manual-matchups/articles/`.
+This pipeline maintains the sharded matchup article store for 29,412 reviewed matchup articles. The small `data/manual-matchups.json` file points to `data/manual-matchups/index.json`; article bodies live under `data/manual-matchups/articles/`.
 
 ## Commands
 
