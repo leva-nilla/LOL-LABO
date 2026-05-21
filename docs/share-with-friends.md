@@ -23,7 +23,7 @@ https://<github-user>.github.io/<repo-name>/
 
 ## 共有しないもの
 
-GitHub Pagesは `_site/` に作った公開用ファイルだけをアップロードします。公開する記事は `reviewed` のみです。`draft` はローカル検証用に残し、ユーザー向けには表示しません。`work/`、`scripts/`、`prompts/`、巨大なローカル作業データは公開不要です。`.gitignore` に入っています。
+GitHub Pagesは `_site/` に作った公開用ファイルだけをアップロードします。公開する記事は `reviewed` のみです。現在は全29,412本を検証済みの `reviewed` として公開します。`work/`、`scripts/`、`prompts/`、巨大なローカル作業データは公開不要です。`.gitignore` に入っています。
 
 ## 更新方法
 
