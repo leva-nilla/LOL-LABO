@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
+import { readArticleStore } from "./matchup-article-store.mjs";
 
-const ARTICLE_PATH = "data/manual-matchups.json";
 const QUEUE_PATH = "data/matchup-queue.json";
 const DDRAGON_ROOT = "https://ddragon.leagueoflegends.com";
 
@@ -10,6 +10,14 @@ const lanePlanFields = ["levels1to3", "preSix", "postSix", "wave", "recall"];
 const runeFields = ["keystone", "mainPath", "mainWhy", "subPath", "subWhy"];
 const itemFields = ["firstBuy", "coreReason", "defensive", "situational", "whenBehind"];
 const skillshotFields = ["hit", "dodge"];
+const forbiddenPatterns = [
+  /\?{3,}/,
+  /\uFFFD/,
+  /自分のチャンピオン/,
+  /対面チャンピオン/,
+  /次の数分で何に困るか/,
+  /敵チーム全体を見る/
+];
 
 async function readJson(path) {
   return JSON.parse(await fs.readFile(path, "utf8"));
@@ -88,6 +96,9 @@ function assertArticle(article, ids, queueIds, runeNames, championNames, errors)
 
   if (parts) {
     const text = collectText(article);
+    for (const pattern of forbiddenPatterns) {
+      if (pattern.test(text)) errors.push(`${article.id} contains forbidden generic or corrupt text: ${pattern}`);
+    }
     const playerName = championNames.get(parts.player) || parts.player;
     const enemyName = championNames.get(parts.enemy) || parts.enemy;
     if (!text.includes(parts.player) && !text.includes(playerName)) {
@@ -99,7 +110,7 @@ function assertArticle(article, ids, queueIds, runeNames, championNames, errors)
   }
 }
 
-const manual = await readJson(ARTICLE_PATH);
+const store = await readArticleStore();
 let queue;
 try {
   queue = await readJson(QUEUE_PATH);
@@ -107,7 +118,7 @@ try {
   queue = undefined;
 }
 
-const patch = queue?.patch || manual.patch;
+const patch = queue?.patch || store.index?.patch || store.pointer?.patch;
 if (!patch) throw new Error("cannot determine patch for article validation");
 
 const runes = await loadJson(`${DDRAGON_ROOT}/cdn/${patch}/data/ja_JP/runesReforged.json`);
@@ -117,9 +128,16 @@ const championNames = new Map(Object.values(champions.data || {}).map((champion)
 const queueIds = queue ? new Set(queue.entries.map((entry) => entry.id)) : undefined;
 const errors = [];
 const ids = new Set();
-const articles = Array.isArray(manual.articles) ? manual.articles : [];
+const articles = Array.isArray(store.articles) ? store.articles : [];
 
 for (const article of articles) assertArticle(article, ids, queueIds, runeNames, championNames, errors);
+
+if (store.index?.articleCount !== undefined && store.index.articleCount !== articles.length) {
+  errors.push(`article index count ${store.index.articleCount} does not match loaded article count ${articles.length}`);
+}
+if (queue?.targetArticleCount !== undefined && articles.length !== queue.targetArticleCount) {
+  errors.push(`article count ${articles.length} does not match target ${queue.targetArticleCount}`);
+}
 
 if (errors.length) {
   console.error(errors.map((error) => `- ${error}`).join("\n"));

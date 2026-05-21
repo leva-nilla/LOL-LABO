@@ -1,6 +1,6 @@
 # Matchup Production Pipeline
 
-This pipeline is designed to grow `data/manual-matchups.json` toward 29,412 reviewed matchup articles.
+This pipeline is designed to grow the sharded matchup article store toward 29,412 reviewed matchup articles. The small `data/manual-matchups.json` file points to `data/manual-matchups/index.json`; article bodies live under `data/manual-matchups/articles/`.
 
 ## Commands
 
@@ -20,6 +20,13 @@ Check progress:
 
 ```powershell
 npm.cmd run status
+```
+
+Fill missing draft articles and write the sharded store:
+
+```powershell
+npm.cmd run fill:drafts
+npm.cmd run repair:articles
 ```
 
 Prepare the next 10 writer prompts without calling any AI CLI:
@@ -63,10 +70,10 @@ Expected loop:
 1. Codex CLI writes one article JSON object.
 2. Gemini CLI reviews it with a short `--prompt` and the article/review context on stdin.
 3. A human or a later fixer step applies required changes.
-4. Merge generated outputs into `data/manual-matchups.json`.
+4. Merge generated outputs into the sharded article store.
 5. `validate-matchup-articles.mjs` gates the merged article database.
 
-Merge outputs:
+Merge outputs into the sharded store:
 
 ```powershell
 npm.cmd run merge:dry

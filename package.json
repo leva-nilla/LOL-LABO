@@ -8,9 +8,12 @@
     "queue": "node scripts/generate-matchup-queue.mjs",
     "validate:articles": "node scripts/validate-matchup-articles.mjs",
     "batch:dry": "node scripts/produce-matchup-batch.mjs --limit 10 --dry-run",
+    "fill:drafts": "node scripts/fill-matchup-drafts.mjs",
     "merge:dry": "node scripts/merge-produced-articles.mjs --dry-run",
     "merge": "node scripts/merge-produced-articles.mjs",
+    "repair:articles": "node scripts/repair-article-quality.mjs",
     "status": "node scripts/production-status.mjs",
-    "produce:loop": "node scripts/run-production-loop.mjs"
+    "produce:loop": "node scripts/run-production-loop.mjs",
+    "build:pages": "node scripts/build-pages.mjs"
   }
 }

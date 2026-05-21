@@ -24,6 +24,7 @@ const state = {
   champions: [],
   championDetails: new Map(),
   manualMatchups: [],
+  manualArticleCache: new Map(),
   items: [],
   runes: [],
   selectedChampionId: "",
@@ -248,11 +249,17 @@ async function loadChampionDetail(id) {
 }
 
 async function loadManualMatchups() {
+  state.manualArticleCache.clear();
   try {
-    const data = await loadJson("./data/manual-matchups.json");
-    state.manualMatchups = Array.isArray(data.articles) ? data.articles : [];
+    const data = await loadJson("./data/manual-matchups/index.json");
+    state.manualMatchups = Array.isArray(data.entries) ? data.entries : [];
   } catch {
-    state.manualMatchups = [];
+    try {
+      const data = await loadJson("./data/manual-matchups.json");
+      state.manualMatchups = Array.isArray(data.articles) ? data.articles : [];
+    } catch {
+      state.manualMatchups = [];
+    }
   }
 }
 
@@ -802,7 +809,7 @@ function matchupAdvice(player, enemy, lane, playerDetail, enemyDetail) {
   return { laneFit, rangeTrade, typeTrade, item, wave, enemyLanes, enemyDamage, skill };
 }
 
-function manualMatchupFor(playerId, enemyId, lane) {
+function manualMatchupEntryFor(playerId, enemyId, lane) {
   const samePairArticles = state.manualMatchups.filter((article) => {
     const samePair = article.player === playerId && article.enemy === enemyId;
     return samePair && article.status !== "archived";
@@ -812,6 +819,22 @@ function manualMatchupFor(playerId, enemyId, lane) {
     samePairArticles.find((article) => article.lane === "ALL") ||
     samePairArticles[0]
   );
+}
+
+async function manualMatchupFor(playerId, enemyId, lane) {
+  const entry = manualMatchupEntryFor(playerId, enemyId, lane);
+  if (!entry) return null;
+  if (entry.summary && entry.winCondition) return entry;
+  if (state.manualArticleCache.has(entry.id)) return state.manualArticleCache.get(entry.id);
+  try {
+    const article = await loadJson(`./${entry.path}`);
+    const value = article.status === "archived" ? null : article;
+    state.manualArticleCache.set(entry.id, value);
+    return value;
+  } catch {
+    state.manualArticleCache.set(entry.id, null);
+    return null;
+  }
 }
 
 function manualCoverageText() {
@@ -931,7 +954,7 @@ async function renderMatchup() {
   const lane = els.matchupLane.value;
   const [playerDetail, enemyDetail] = await Promise.all([loadChampionDetail(player.id), loadChampionDetail(enemy.id)]);
   const advice = matchupAdvice(player, enemy, lane, playerDetail, enemyDetail);
-  const manualArticle = manualMatchupFor(player.id, enemy.id, lane);
+  const manualArticle = await manualMatchupFor(player.id, enemy.id, lane);
   if (manualArticle) {
     els.matchupResult.innerHTML = `
       <div class="insight"><b>手書き攻略</b><p>${manualArticle.summary}</p></div>
@@ -981,7 +1004,8 @@ async function renderDetail() {
   const runes = currentKeystones(champion);
   const itemGroups = findItemGroups(champion, selectedEnemy);
   const matchup = selectedEnemy ? matchupAdvice(champion, selectedEnemy, selectedLane, detail, enemyDetail) : null;
-  const manualArticle = selectedEnemy ? manualMatchupFor(champion.id, selectedEnemy.id, selectedLane) : null;
+  const manualArticle = selectedEnemy ? await manualMatchupFor(champion.id, selectedEnemy.id, selectedLane) : null;
+  if (token !== state.detailRenderToken) return;
   const plan = itemPlanByProfile(champion, selectedEnemy, detail);
   const spells = detail?.spells || [];
   const passiveText = stripHtml(detail?.passive?.description || "").slice(0, 150);
