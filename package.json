@@ -12,6 +12,7 @@
     "merge:dry": "node scripts/merge-produced-articles.mjs --dry-run",
     "merge": "node scripts/merge-produced-articles.mjs",
     "repair:articles": "node scripts/repair-article-quality.mjs",
+    "repair:promoted-quality": "node scripts/repair-promoted-quality-targets.mjs",
     "status": "node scripts/production-status.mjs",
     "produce:loop": "node scripts/run-production-loop.mjs",
     "build:pages": "node scripts/build-pages.mjs"
