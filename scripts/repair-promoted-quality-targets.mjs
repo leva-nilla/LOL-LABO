@@ -118,12 +118,84 @@ function enemyMapCue(article, entry, enemy, offset = 0) {
   ], offset);
 }
 
+function primaryEnemyLane(entry) {
+  return entry.enemyLanes?.[0] || "JG";
+}
+
+function roamTiming(article, entry, enemy, enemyKit, offset = 0) {
+  const source = primaryEnemyLane(entry);
+  const bySource = {
+    TOP: [
+      `${enemy.name}がトップの大きい波を押し切って川側へ消えた直後`,
+      `${enemy.name}がトップでリコールせず姿を隠し、${spellLabel(enemyKit.move)}を残している時間`,
+      `トップ側のミアが出た後、${enemy.name}の${spellLabel(enemyKit.cc)}がまだ見えていない場面`
+    ],
+    JG: [
+      `${enemy.name}が2周目のキャンプ後に川へ出られる時間`,
+      `ドラゴンやヴォイドグラブ前に${enemy.name}の${spellLabel(enemyKit.move)}が見えていない時間`,
+      `${enemy.name}がワードに映らず、${spellLabel(enemyKit.cc)}から先に触れる位置へ入れる場面`
+    ],
+    MID: [
+      `${enemy.name}がミッドの波を押してからサイドへ消えた直後`,
+      `${enemy.name}がレベル6前後で${spellLabel(enemyKit.r)}を持ち、川へ寄れる時間`,
+      `ミッドのミアが遅れて、${enemy.name}の${spellLabel(enemyKit.cc)}がサイドで使われていない場面`
+    ],
+    ADC: [
+      `${enemy.name}がボットの波を押し切り、サポートと一緒に川へ歩ける時間`,
+      `${enemy.name}がリコールせずレーンから消え、${spellLabel(enemyKit.poke)}で先に削れる位置へ寄る場面`,
+      `ボット側の押し込み後に${enemy.name}の${spellLabel(enemyKit.move)}が残っている時間`
+    ],
+    SUP: [
+      `${enemy.name}がボットの視界から消えて、先に川へワードを置ける時間`,
+      `${enemy.name}がADCを一人にして、${spellLabel(enemyKit.cc)}からロームを始められる場面`,
+      `サポートのミアが遅れ、${enemy.name}の${spellLabel(enemyKit.move)}がまだ見えていない時間`
+    ]
+  };
+  return pick(article, bySource[source] || bySource.JG, offset);
+}
+
+function roamVision(article, entry, enemy, offset = 0) {
+  const source = primaryEnemyLane(entry);
+  const bySource = {
+    TOP: ["川上側の浅いブッシュ", "ヘラルド側の入口", "自陣寄りの三角導線"],
+    JG: ["川の入口", "自陣ジャングルの曲がり角", "次の中立へ向かう通路"],
+    MID: ["川中央の浅いワード", "ラプター横の入口", "ミッドからサイドへ出る通路"],
+    ADC: ["川下側の入口", "ドラゴン前の浅い視界", "ボットからミッドへ上がる通路"],
+    SUP: ["川下側の入口", "ドラゴン前の浅い視界", "敵サポートが最初に触るブッシュ"]
+  };
+  const spot = pick(article, bySource[source] || bySource.JG, offset);
+  return `${spot}を先に確認する`;
+}
+
+function playerRoamResponse(article, player, enemy, playerKit, enemyKit, offset = 0) {
+  const response = responseSpell(playerKit);
+  if (article.lane === "JG") {
+    return pick(article, [
+      `${player.name}は${spellLabel(response)}を先に撃たず、${enemy.name}の${spellLabel(enemyKit.move)}が見えた後のカウンターガンクに残す`,
+      `${player.name}はキャンプを切り上げ、${enemy.name}の${spellLabel(enemyKit.cc)}が届く川の線から一歩外れる`,
+      `${player.name}はスマイトや${spellLabel(response)}を中立の取り切りだけに使わず、味方の退路を作る札として残す`
+    ], offset);
+  }
+  if (article.lane === "SUP") {
+    return pick(article, [
+      `${player.name}は味方ADCへ下がるピンを出し、${spellLabel(response)}を${enemy.name}の最初の入りに合わせる`,
+      `${player.name}は深いワード更新を止め、${enemy.name}の${spellLabel(enemyKit.cc)}が届く線から味方ADCを外す`,
+      `${player.name}は${spellLabel(playerKit.protect)}かサモナースペルを味方ADCの退路用に残し、${enemy.name}の最初の入りを受けてから返す`
+    ], offset);
+  }
+  return pick(article, [
+    `${player.name}は${spellLabel(response)}を先に撃たず、${enemy.name}の${spellLabel(enemyKit.move)}が見えた後の足止めに残す`,
+    `${player.name}は${spellLabel(playerKit.poke)}で波だけ触り、${enemy.name}の${spellLabel(enemyKit.cc)}が届く線から一歩下がる`,
+    `${player.name}は${spellLabel(playerKit.protect)}かサモナースペルを味方の退路用に残し、${enemy.name}の最初の入りを受けてから返す`
+  ], offset);
+}
+
 function spellDescription(spell) {
   return stripHtml(spell?.description || spell?.tooltip || "");
 }
 
 function chooseSpell(detail, keywords, fallbackIndex = 0) {
-  const spells = detail?.spells || [];
+  const spells = (detail?.spells || []).map((spell, index) => ({ ...spell, name: displaySpellName(spell), key: ["Q", "W", "E", "R"][index] || "Q" }));
   return spells.find((spell) => keywords.some((keyword) => spellDescription(spell).includes(keyword))) ||
     spells[fallbackIndex] ||
     spells[0] ||
@@ -131,17 +203,80 @@ function chooseSpell(detail, keywords, fallbackIndex = 0) {
 }
 
 function spellAt(detail, index, fallback) {
-  return detail?.spells?.[index] || { name: fallback, key: ["Q", "W", "E", "R"][index] || "Q" };
+  const key = ["Q", "W", "E", "R"][index] || "Q";
+  const spell = detail?.spells?.[index];
+  return spell ? { ...spell, name: displaySpellName(spell), key } : { name: fallback, key };
+}
+
+function displaySpellName(spell) {
+  return String(spell?.name || "主力スキル").replace(/^[「｢『"']+|[」｣』"']+$/g, "");
+}
+
+function spellLabel(spell) {
+  return spell?.key ? `${spell.key}「${displaySpellName(spell)}」` : displaySpellName(spell);
 }
 
 function uniqueSpellNames(...spells) {
-  return [...new Set(spells.map((spell) => spell?.name).filter(Boolean))];
+  return [...new Set(spells.map(displaySpellName).filter(Boolean))];
+}
+
+function uniqueSpellLabels(...spells) {
+  const seen = new Set();
+  const labels = [];
+  for (const spell of spells) {
+    if (!spell?.name || seen.has(spell.name)) continue;
+    seen.add(spell.name);
+    labels.push(spellLabel(spell));
+  }
+  return labels;
+}
+
+function spellAlternatives(spells, fallback = "主力スキル") {
+  const labels = uniqueSpellLabels(...spells);
+  if (labels.length >= 2) return `${labels[0]}か${labels[1]}`;
+  return labels[0] || fallback;
 }
 
 function spellPair(spells, fallback = "主力スキル") {
   const names = uniqueSpellNames(...spells);
   if (names.length >= 2) return `${names[0]}と${names[1]}`;
   return names[0] || fallback;
+}
+
+function alternateSpell(baseSpell, candidates) {
+  const baseName = baseSpell?.name;
+  return candidates.find((spell) => spell?.name && spell.name !== baseName) || candidates.find(Boolean) || baseSpell;
+}
+
+function responseSpell(playerKit) {
+  return alternateSpell(playerKit.poke, [playerKit.cc, playerKit.move, playerKit.protect, playerKit.poke]);
+}
+
+function laneActionNoun(lane) {
+  return lane === "JG" ? "キャンプと中立" : lane === "SUP" ? "味方ADCのCS位置" : "ミニオン波";
+}
+
+function playerRoamSetup(article, entry, player, enemy, playerKit, enemyKit, offset = 0) {
+  const response = responseSpell(playerKit);
+  if (article.lane === "JG") {
+    return pick(article, [
+      `${player.name}側は${spellLabel(playerKit.poke)}をキャンプ処理だけで使い切らず、${roamVision(article, entry, enemy, offset + 1)}まで見てから次の中立へ触る`,
+      `${player.name}側はキャンプを一つ早く切り上げ、${spellLabel(response)}を${enemy.name}の${spellLabel(enemyKit.move)}後のカウンターガンクに残す`,
+      `${player.name}側は${enemy.name}が映るまで深い侵入を止め、${spellLabel(response)}とスマイトを退路側に残す`
+    ], offset);
+  }
+  if (article.lane === "SUP") {
+    return pick(article, [
+      `${player.name}側は味方ADCへ危険ピンを先に出し、${spellLabel(response)}を${enemy.name}の最初の入りに残す`,
+      `${player.name}側は深いワードを諦め、${roamVision(article, entry, enemy, offset + 1)}だけで止めて味方ADCの退路を守る`,
+      `${player.name}側は${spellLabel(playerKit.poke)}で敵ボットの前歩きだけ止め、${spellLabel(response)}を逃げと反撃に残す`
+    ], offset);
+  }
+  return pick(article, [
+    `${player.name}側は${spellLabel(playerKit.poke)}で波を切り、${spellLabel(response)}を逃げと反撃に残す`,
+    `${player.name}側は${laneActionNoun(article.lane)}を自陣寄りで受け、${spellLabel(response)}を${enemy.name}の入りに合わせる`,
+    `${player.name}側は押し切る前に${roamVision(article, entry, enemy, offset + 1)}だけ確認し、${spellLabel(response)}を温存する`
+  ], offset);
 }
 
 function kit(detail) {
@@ -268,6 +403,14 @@ function laneOpener(article, entry, player, enemy, playerKit, enemyKit) {
   const enemyRange = rangeProfile(enemy);
   const style = pick(article, ["距離管理", "先手の交換", "ウェーブ位置", "視界の置き方", "主要スキルの温存"], 1);
 
+  if (!direct) {
+    return pick(article, [
+      `${player.name}${laneLabel(article.lane)}は、${enemyLaneText(entry)}から来る${enemy.name}のロームを読む警戒記事。${roamTiming(article, entry, enemy, enemyKit, 101)}に、${spellAlternatives([enemyKit.cc, enemyKit.move])}から先に触られると正面の有利まで消える。`,
+      `${player.name}側は正面対面より、${enemy.name}が${enemyLaneText(entry)}から消えた後の最初の10秒を管理する。${roamVision(article, entry, enemy, 102)}までで止めて、${spellLabel(responseSpell(playerKit))}を返しに残す。`,
+      `${player.name}${laneLabel(article.lane)}では、${enemy.name}本体と殴り合うよりローム到着前の${laneActionNoun(article.lane)}、視界、退路が大事。${roamTiming(article, entry, enemy, enemyKit, 103)}は、欲張って前に残らない。`
+    ], 100);
+  }
+
   if (article.lane === "JG") {
     return pick(article, [
       `${player.name}ジャングルは、${enemy.name}の${enemyKit.cc.name}が絡むガンク角を先に潰して、${playerKit.poke.name}をクリアだけで雑に使い切らない試合。${style}を崩すと、相手の${enemyType}らしい入り方に合わせられる。`,
@@ -283,9 +426,6 @@ function laneOpener(article, entry, player, enemy, playerKit, enemyKit) {
       `${player.name}サポートでは、${enemy.name}の位置情報が薄い時ほどレーン中央に寄りすぎない。${playerKit.protect.name}とワードを同時に使う時間を作れると、2v2の崩れ方がかなり減る。`
     ], 13);
   }
-  if (!direct) {
-    return `${player.name}${laneLabel(article.lane)}は、正面の相手だけでなく${enemyLaneText(entry)}から来る${enemy.name}の圧を考えて立つ対面。${playerRange}の${playerType}として${playerKit.poke.name}で先に波を触り、${enemyKit.move.name}が見えない時間は川側に深く出ない。`;
-  }
   if (playerRange === "レンジ" && enemyRange === "メレー") {
     return `${player.name}${laneLabel(article.lane)}は、${enemy.name}が${enemyKit.move.name}で届く前に${playerKit.poke.name}で削り、追撃距離を残さない対面。射程差は前に立つ権利じゃなくて、相手の入りを一歩遅らせるために使う。`;
   }
@@ -295,7 +435,30 @@ function laneOpener(article, entry, player, enemy, playerKit, enemyKit) {
   return `${player.name}${laneLabel(article.lane)}対${enemy.name}は、${playerKit.poke.name}と${enemyKit.cc.name}の有無で交換が決まる対面。${playerType}対${enemyType}なので、長く殴るか短く切るかを波ごとに決める。`;
 }
 
-function tradeAdvice(article, player, enemy, playerKit, enemyKit) {
+function tradeAdvice(article, entry, player, enemy, playerKit, enemyKit) {
+  const direct = (entry.enemyLanes || []).includes(article.lane);
+  if (!direct) {
+    if (article.lane === "JG") {
+      return [
+        `${roamTiming(article, entry, enemy, enemyKit, 111)}は、侵入を始める合図じゃなく下がる合図。${playerRoamResponse(article, player, enemy, playerKit, enemyKit, 112)}。`,
+        `${enemy.name}の${spellLabel(enemyKit.cc)}が見えていない間は、${player.name}の${spellLabel(playerKit.poke)}をキャンプ処理だけで使い切らない。${roamVision(article, entry, enemy, 113)}まで見て、寄れないなら反対側の中立へ変える。`,
+        `${enemy.name}が姿を出した後だけ、${player.name}は${spellAlternatives([responseSpell(playerKit), playerKit.move])}で短く返す。追撃を伸ばすより、ミアが解けた瞬間に体力、スマイト、フラッシュを残す。`
+      ];
+    }
+    if (article.lane === "SUP") {
+      return [
+        `${roamTiming(article, entry, enemy, enemyKit, 111)}は、前へ仕掛ける合図じゃなく味方ADCを下げる合図。${playerRoamResponse(article, player, enemy, playerKit, enemyKit, 112)}。`,
+        `${enemy.name}の${spellLabel(enemyKit.cc)}が見えていない間は、${player.name}の${spellLabel(playerKit.poke)}をブッシュ確認だけで捨てない。${roamVision(article, entry, enemy, 113)}までで止め、深いワードは味方の寄りがある時だけ。`,
+        `${enemy.name}が姿を出した後だけ、${player.name}は${spellAlternatives([responseSpell(playerKit), playerKit.protect])}で味方ADCの退路を作る。追撃を伸ばすより、ミアが解けた瞬間に体力とサモナースペルを残す。`
+      ];
+    }
+    return [
+      `${roamTiming(article, entry, enemy, enemyKit, 111)}は、交換を始める合図じゃなく下がる合図。${playerRoamResponse(article, player, enemy, playerKit, enemyKit, 112)}。`,
+      `${enemy.name}の${spellLabel(enemyKit.cc)}が見えていない間は、${player.name}の${spellLabel(playerKit.poke)}を敵本体ではなく波処理に使う。押し切ったら${roamVision(article, entry, enemy, 113)}までで止める。`,
+      `${enemy.name}が姿を出した後だけ、${player.name}は${spellAlternatives([responseSpell(playerKit), playerKit.move])}で短く返す。追撃を伸ばすより、ミアが解けた瞬間に体力とサモナースペルを残す。`
+    ];
+  }
+
   const styles = {
     TOP: [
       `${enemy.name}の${enemyKit.cc.name}を見てから、${playerKit.poke.name}と通常攻撃で一回だけ返す。長く残るとミニオンと次のスキルで損をする。`,
@@ -351,6 +514,95 @@ function tradeAdvice(article, player, enemy, playerKit, enemyKit) {
 }
 
 function lanePlan(article, entry, player, enemy, playerKit, enemyKit) {
+  const direct = (entry.enemyLanes || []).includes(article.lane);
+  if (!direct) {
+    if (article.lane === "JG") {
+      return {
+        levels1to3: pick(article, [
+          `最初の数分はフルクリアを崩しすぎない。${enemy.name}の最初のロームより、${player.name}が体力を残して${roamVision(article, entry, enemy, 121)}時間を作る。`,
+          `序盤は深い侵入より、${enemyLaneText(entry)}側のミアを早く読む。${enemy.name}が見えない時は${spellLabel(responseSpell(playerKit))}を使い切らず、川の出口を残す。`,
+          `レベル3まではキャンプ数と体力を優先する。${spellLabel(enemyKit.cc)}が刺さるレーンだけ早めに見ると、遅れたカウンターガンクを減らせる。`
+        ], 120),
+        preSix: pick(article, [
+          `6前は${roamTiming(article, entry, enemy, enemyKit, 131)}を危険時間にする。見えない間は侵入をやめ、${playerRoamResponse(article, player, enemy, playerKit, enemyKit, 132)}。`,
+          `${enemyLaneText(entry)}側のミアが遅れたら、キャンプ継続より一度ピンを出す。${player.name}は${spellLabel(playerKit.poke)}を残し、川側へ体を出しすぎない。`,
+          `中立前の接触は、近いレーンが先に動ける時だけ受ける。${enemy.name}の${spellLabel(enemyKit.move)}が残るなら、狭い入口で長く戦わない。`
+        ], 130),
+        postSix: pick(article, [
+          `6以降は${enemy.name}の${spellLabel(enemyKit.r)}がロームの起点。Rが見えていない時は、${player.name}の${spellLabel(responseSpell(playerKit))}かフラッシュを守りに使える距離で受ける。`,
+          `レベル6後は${enemy.name}が画面外から川へ来る前提でルートを組む。${spellLabel(enemyKit.r)}が落ちた直後だけ、${player.name}は強く視界を戻す。`,
+          `Rが絡む時間は取り切りより生存が先。${enemy.name}の${spellLabel(enemyKit.cc)}を避けたら、追うより味方と同じ方向へ下がって次の中立を待つ。`
+        ], 140),
+        wave: pick(article, [
+          `サイドの波が動く時は、寄れる味方を基準にルートを変える。${enemy.name}本体だけ追うと、次のオブジェクト準備が遅れる。`,
+          `味方が押している時だけ深い視界を取りに行く。押されているなら、${enemy.name}を探すよりタワー下の受けを助ける。`,
+          `中立を触る前に、近いレーンの主導権を見る。寄りが遅い側で戦うと、スキルの当たり外れ以前に人数で負ける。`
+        ], 150),
+        recall: pick(article, [
+          `リコールは${enemy.name}が${enemyLaneText(entry)}に映った後か、次の中立が出る前に合わせる。低体力で残ると${spellLabel(enemyKit.move)}から拾われる。`,
+          `${enemy.name}のミア中にキャンプを欲張るより、半テンポ早く帰ってワードを買い直す。次のロームで${spellLabel(responseSpell(playerKit))}を残せる状態の方が価値が高い。`,
+          `買い物前に無理にもう一キャンプ触らない。${roamTiming(article, entry, enemy, enemyKit, 161)}なら、CS数よりリコール完了と次の視界が勝ち筋になる。`
+        ], 160)
+      };
+    }
+    if (article.lane === "SUP") {
+      return {
+        levels1to3: pick(article, [
+          `レベル1から3は、${enemy.name}の最初のロームより味方ADCの足元を崩さない。${spellLabel(playerKit.poke)}で敵ボットの前歩きを止め、${roamVision(article, entry, enemy, 121)}だけ確認する。`,
+          `序盤は深い視界を取りに行くより、${enemyLaneText(entry)}側のミアを早く読む。${enemy.name}が見えない時は${spellLabel(responseSpell(playerKit))}を使い切らず、味方ADCの退路を残す。`,
+          `最初の数分はローム到着が遅い代わりに情報が薄い。${player.name}はブッシュ主導権を少し捨てても、${spellLabel(enemyKit.cc)}の射程へ味方ADCを入れない。`
+        ], 120),
+        preSix: pick(article, [
+          `6前は${roamTiming(article, entry, enemy, enemyKit, 131)}を危険時間にする。見えない間は前のめりな交換をやめ、${playerRoamResponse(article, player, enemy, playerKit, enemyKit, 132)}。`,
+          `6前の返しは、${enemy.name}の${spellLabel(enemyKit.move)}が見えた後でいい。先に${spellLabel(responseSpell(playerKit))}を撃つと、寄られた時に味方ADCを逃がす札がなくなる。`,
+          `${enemyLaneText(entry)}側のミアが遅れたら、ウェーブを押すより一度ピンを出す。${player.name}は味方ADCの横へ戻り、川側へ体を出しすぎない。`
+        ], 130),
+        postSix: pick(article, [
+          `6以降は${enemy.name}の${spellLabel(enemyKit.r)}がロームの起点。Rが見えていない時は、${player.name}の${spellLabel(playerKit.protect)}かフラッシュを味方ADC用に残す。`,
+          `レベル6後は${enemy.name}が画面外から来る前提で立つ。${spellLabel(enemyKit.r)}が落ちた直後だけ、${player.name}は深めの視界を戻す。`,
+          `Rが絡む時間は倒し切りより生存が先。${enemy.name}の${spellLabel(enemyKit.cc)}を避けたら、追うより味方ADCと同じ方向へ下がって次の波を取る。`
+        ], 140),
+        wave: pick(article, [
+          `ボットの波は味方ADCが触れる位置で保つ。押し切る時も${roamVision(article, entry, enemy, 151)}までで止め、${enemy.name}のミアが解けるまで暗い川に残らない。`,
+          `大きい波を押すなら、先に${enemyLaneText(entry)}側の位置情報を取る。${enemy.name}が消えている時の深いワード欲張りは、${spellLabel(enemyKit.cc)}一発で台無しになる。`,
+          `引く波では味方ADCの横、押す波では浅い視界だけ置く。${player.name}はワードを理由に川へ入りすぎず、${spellLabel(responseSpell(playerKit))}を帰り道に残す。`
+        ], 150),
+        recall: pick(article, [
+          `リコールは${enemy.name}が${enemyLaneText(entry)}に映った後か、味方ADCと一緒に合わせる。低体力で片方だけ残ると${spellLabel(enemyKit.move)}から拾われる。`,
+          `${enemy.name}のミア中に居座るより、半テンポ早く帰ってワードを買い直す。次のロームで${spellLabel(playerKit.protect)}を残せる状態の方が価値が高い。`,
+          `買い物前に無理にもう一波付き合わない。${roamTiming(article, entry, enemy, enemyKit, 161)}なら、CS数よりリコール完了と次の視界が勝ち筋になる。`
+        ], 160)
+      };
+    }
+    return {
+      levels1to3: pick(article, [
+        `レベル1から3は、${enemy.name}の最初のロームより自分の波を崩さない。${spellLabel(playerKit.poke)}で押し返せる形を作り、${roamVision(article, entry, enemy, 121)}だけ確認する。`,
+        `序盤は深い視界を取りに行くより、${enemyLaneText(entry)}側のミアを早く読む。${enemy.name}が見えない時は${spellLabel(playerKit.cc)}を使い切らず、退路を残す。`,
+        `最初の数分はローム到着が遅い代わりに情報が薄い。${player.name}はラストヒットを少し捨てても、${spellLabel(enemyKit.cc)}の射程へ先に入らない。`
+      ], 120),
+      preSix: pick(article, [
+        `6前は${roamTiming(article, entry, enemy, enemyKit, 131)}を危険時間にする。見えない間は前のめりな交換をやめ、${playerRoamResponse(article, player, enemy, playerKit, enemyKit, 132)}。`,
+        `6前の返しは、${enemy.name}の${spellLabel(enemyKit.move)}が見えた後でいい。先に${spellLabel(playerKit.cc)}を撃つと、寄られた時に味方を逃がす札がなくなる。`,
+        `${enemyLaneText(entry)}側のミアが遅れたら、ウェーブを押すより一度ピンを出す。${player.name}は${spellLabel(playerKit.poke)}で最低限処理して、川側へ体を出しすぎない。`
+      ], 130),
+      postSix: pick(article, [
+        `6以降は${enemy.name}の${spellLabel(enemyKit.r)}がロームの起点。Rが見えていない時は、${player.name}の${spellLabel(playerKit.protect)}かフラッシュを守りに使える距離で受ける。`,
+        `レベル6後は${enemy.name}が画面外から来る前提で立つ。${spellLabel(enemyKit.r)}が落ちた直後だけ、${player.name}の${spellLabel(playerKit.poke)}で強く波を押して視界を戻す。`,
+        `Rが絡む時間は倒し切りより生存が先。${enemy.name}の${spellLabel(enemyKit.cc)}を避けたら、追うより味方と同じ方向へ下がって次の波を取る。`
+      ], 140),
+      wave: pick(article, [
+        `波は自陣寄りで受けられる形が安全。押し切る時も${roamVision(article, entry, enemy, 151)}までで止め、${enemy.name}のミアが解けるまでタワー前に長居しない。`,
+        `大きい波を押すなら、先に${enemyLaneText(entry)}側の位置情報を取る。${enemy.name}が消えている時のタワープレート欲張りは、${spellLabel(enemyKit.cc)}一発で台無しになる。`,
+        `引く波ではCSを守り、押す波では浅い視界だけ置く。${player.name}は波を理由に川へ入りすぎず、${spellLabel(playerKit.move)}を帰り道に残す。`
+      ], 150),
+      recall: pick(article, [
+        `リコールは${enemy.name}が${enemyLaneText(entry)}に映った後か、味方が先に視界を取った後に合わせる。低体力で残ると${spellLabel(enemyKit.move)}から拾われる。`,
+        `${enemy.name}のミア中に居座るより、半テンポ早く帰ってワードを買い直す。次のロームで${spellLabel(playerKit.protect)}を残せる状態の方が価値が高い。`,
+        `買い物前に無理にもう一波触らない。${roamTiming(article, entry, enemy, enemyKit, 161)}なら、CS数よりリコール完了と次の視界が勝ち筋になる。`
+      ], 160)
+    };
+  }
+
   if (article.lane === "JG") {
     return {
       levels1to3: pick(article, [
@@ -418,9 +670,42 @@ function lanePlan(article, entry, player, enemy, playerKit, enemyKit) {
   };
 }
 
-function itemPlan(article, player, enemy, playerKit) {
+function nonDirectItemFirstBuy(article, entry, player, enemy, enemyKit) {
+  if (article.lane === "JG") {
+    return pick(article, [
+      `${player.name}ジャングルの最初の買い物は、${enemy.name}のロームに合わせて川へ入り直せることを基準にする。靴、体力、コントロールワード、クリア速度のどれかを足して、${spellLabel(enemyKit.cc)}を受ける前にルートを変えられる状態を作る。`,
+      `${enemy.name}が${enemyLaneText(entry)}から消える試合では、火力素材だけに寄せない。最初の帰還で視界と移動速度を少し足し、${roamVision(article, entry, enemy, 201)}余裕を買う。`,
+      `序盤の買い物は次の中立へ先に入るための準備。${enemy.name}の${spellLabel(enemyKit.move)}が見えない時間でも、体力を残して川を横切れる素材を優先する。`
+    ], 200);
+  }
+  if (article.lane === "SUP") {
+    return pick(article, [
+      `${player.name}サポートの最初の買い物は、味方ADCを下げながら視界を戻せることを基準にする。体力、マナ回復、ワード、移動速度を足して、${enemy.name}の${spellLabel(enemyKit.cc)}を深い位置で受けない。`,
+      `${enemy.name}のロームが怖い時は、火力より補充ワードと耐久を先に見る。${roamVision(article, entry, enemy, 201)}だけで止められる買い物なら十分。`,
+      `買い物で欲しいのは一人で奥へ入る強さじゃない。${enemy.name}が消えた時に味方ADCの横へ戻れる体力と視界を買う。`
+    ], 200);
+  }
+  return pick(article, [
+    `${player.name}側の最初の買い物は、${enemy.name}のロームを一度受けても崩れないことを基準にする。靴、体力、視界、ウェーブ処理のどれかを足して、${spellLabel(enemyKit.cc)}を受ける前に下がれる状態を作る。`,
+    `${enemy.name}が${enemyLaneText(entry)}から消える試合では、完成火力へ急ぎすぎない。押し返す素材か靴を挟み、${roamVision(article, entry, enemy, 201)}時間を作る。`,
+    `最初の帰還では、次のロームを受ける体力と波処理を買う。${enemy.name}の${spellLabel(enemyKit.move)}が残るなら、少しの火力より下がれる足の方が価値がある。`
+  ], 200);
+}
+
+function nonDirectItemCoreReason(article, entry, player, enemy, playerKit, statText) {
+  if (article.lane === "JG") {
+    return `${player.name}は${statText}が欲しいが、この組み合わせでは先に${enemy.name}のロームへ遅れないことが大事。キャンプ処理を落としすぎず、浅い視界と川への入り直しを買う。`;
+  }
+  if (article.lane === "SUP") {
+    return `${player.name}は${statText}が欲しいが、この組み合わせでは味方ADCを置いて深く歩かない形を優先する。視界、耐久、スキル回転を買って、${enemy.name}が消えた時の退路を残す。`;
+  }
+  return `${player.name}は${statText}が欲しいが、この組み合わせでは先に${enemy.name}のロームを受ける時間を減らす。${spellLabel(playerKit.poke)}で波を処理できる素材と、浅い視界を置く余裕を優先する。`;
+}
+
+function itemPlan(article, entry, player, enemy, playerKit, enemyKit) {
   const type = archetype(player);
   const enemyDamage = damageProfile(enemy);
+  const direct = (entry.enemyLanes || []).includes(article.lane);
   const statText = {
     マークスマン: "攻撃力、攻撃速度、クリティカル、ライフスティール",
     メイジ: "魔力、マナ、スキルヘイスト、魔法防御貫通",
@@ -431,18 +716,212 @@ function itemPlan(article, player, enemy, playerKit) {
     汎用: "火力、体力、防御、スキルヘイスト"
   }[type] || "火力、体力、防御、スキルヘイスト";
 
-  const firstBuy = article.lane === "SUP"
+  const firstBuy = !direct
+    ? nonDirectItemFirstBuy(article, entry, player, enemy, enemyKit)
+    : article.lane === "SUP"
     ? `${player.name}サポートは視界、体力、マナ回復を優先する。${enemy.name}の圧が見える前にワードを置ける状態を作り、単独で深い場所へ入らない。`
     : article.lane === "JG"
       ? `${player.name}ジャングルはクリア速度と体力維持を優先する。最初の帰還では${playerKit.poke.name}の回転に関わる素材を買い、無理な1対1用の高額品へ急がない。`
       : `最初の買い物は${statText}を軽く伸ばす素材から。${enemy.name}の${enemyDamage}がきついなら、完成火力より先に靴や耐久の小物を挟む。`;
+  const behindTools = article.lane === "JG"
+    ? "安い耐久、靴、コントロールワード、クリア速度"
+    : article.lane === "SUP"
+      ? "安い耐久、靴、補充ワード、マナ維持"
+      : "安い耐久、靴、視界、ウェーブ処理";
+  const nextFight = article.lane === "JG"
+    ? "次の川周り"
+    : article.lane === "SUP"
+      ? "次のボット側の受け"
+      : `次の${laneLabel(article.lane)}戦`;
 
   return {
     firstBuy,
-    coreReason: `${player.name}は${type}なので、${playerKit.poke.name}を当てた後にもう一度動ける${statText}を中心にする。${enemy.name}相手では一発の派手な火力より、次の交換に残れる買い物が大事。`,
+    coreReason: direct
+      ? `${player.name}は${type}なので、${playerKit.poke.name}を当てた後にもう一度動ける${statText}を中心にする。${enemy.name}相手では一発の派手な火力より、次の交換に残れる買い物が大事。`
+      : nonDirectItemCoreReason(article, entry, player, enemy, playerKit, statText),
     defensive: `${enemy.name}は${enemyDamage}の圧がある。先に落ちるなら、火力完成品を急ぐ前に${enemyDamage === "魔法寄り" ? "魔法防御と体力" : enemyDamage === "物理寄り" ? "物理防御と体力" : "体力と両方の防御"}を挟む。生きていないとスキルも撃てない。`,
     situational: `${enemy.name}が回復、シールド、突入、ポークのどれで試合を動かしているかを見る。対回復、対シールド、移動速度、視界、耐久のうち、一番負け筋を減らすものを選ぶ。`,
-    whenBehind: `負けている時は高額完成品に直行しない。${player.name}が次の${laneLabel(article.lane)}戦で最低限生きて${playerKit.poke.name}を使えるように、安い耐久、靴、視界、ウェーブ処理を優先する。`
+    whenBehind: `負けている時は高額完成品に直行しない。${player.name}が${nextFight}で最低限生きて${playerKit.poke.name}を使えるように、${behindTools}を優先する。`
+  };
+}
+
+function roamThreatModel(article, entry, player, enemy, playerKit, enemyKit) {
+  if (article.lane === "JG") {
+    return [
+      pick(article, [
+        `${roamTiming(article, entry, enemy, enemyKit, 181)}に${enemy.name}が見えないなら、川の先入りを諦める。${player.name}は${spellLabel(playerKit.poke)}でキャンプを早く切り上げ、${spellLabel(responseSpell(playerKit))}をカウンターガンクに残す。`,
+        `${enemy.name}がワードに映らず、${spellLabel(enemyKit.cc)}から先に触れる位置へ入れる場面では、${player.name}は中立へ直行しない。先に近いレーンの体力と寄りを確認する。`,
+        `${enemyLaneText(entry)}側のミアが遅れたら、${enemy.name}の${spellLabel(enemyKit.move)}を見てから川へ入る。暗い入口で会うと、スマイトを押す前に体力を削られる。`
+      ], 181),
+      pick(article, [
+        `${enemy.name}の${spellLabel(enemyKit.r)}がある時間は、ローム到着後の追撃が伸びる。${player.name}はフラッシュか${spellLabel(responseSpell(playerKit))}を中立の取り切りだけに使い切らない。`,
+        `ドラゴンやヴォイドグラブ前に${spellLabel(enemyKit.r)}が見えていないなら、${player.name}は先にピンを出す。味方が寄れない形で触る中立は、ほぼ餌になる。`,
+        `${enemy.name}がRを持つ時間は、浅いワードで十分な場面が増える。${player.name}は深い侵入より、反対側キャンプの回収で損を小さくする。`
+      ], 182),
+      pick(article, [
+        `${enemyLaneText(entry)}側のミアを見落として深い視界へ行くと、人数差で崩れる。${roamVision(article, entry, enemy, 183)}だけで止め、味方の寄りが出てから次へ進む。`,
+        `${enemy.name}が消えている時の一人侵入は、カウンターガンクの札を捨てる動き。${player.name}は入口を一つ確認したら、味方側へ戻る。`,
+        `正面で勝てそうでも、${enemy.name}の位置がない間は長く殴らない。中立の体力より、味方が先に動けるかを優先する。`
+      ], 183)
+    ];
+  }
+  if (article.lane === "SUP") {
+    return [
+      pick(article, [
+        `${roamTiming(article, entry, enemy, enemyKit, 181)}に${enemy.name}が見えないなら、味方ADCを先に下げる。${player.name}は${spellLabel(responseSpell(playerKit))}を前の仕掛けではなく退路作りに残す。`,
+        `${enemy.name}が${enemyLaneText(entry)}から消えた時、深いワードへ歩くのが一番安い負け方。${player.name}は味方ADCの横へ戻り、${spellLabel(enemyKit.cc)}の線を外す。`,
+        `サポート側は視界を取りたい時間ほど危ない。${enemy.name}の${spellLabel(enemyKit.move)}が見えないなら、${player.name}はブッシュ保持より下がるピンを優先する。`
+      ], 181),
+      pick(article, [
+        `${enemy.name}の${spellLabel(enemyKit.r)}がある時間は、ローム到着後の追撃が伸びる。${player.name}は${spellLabel(playerKit.protect)}かフラッシュを味方ADCのために残す。`,
+        `レベル6後は${enemy.name}のRが画面外から届く前提で立つ。${player.name}は軽いハラスより、味方ADCが逃げる一歩を作る。`,
+        `R絡みの時間に先に仕掛けるなら、敵ボットの反撃まで見る。${enemy.name}が見えないまま入ると、勝った2v2が人数差で壊れる。`
+      ], 182),
+      pick(article, [
+        `${enemyLaneText(entry)}側のミアを見落として深い視界へ行くと、正面の対面に勝っていても人数差で崩れる。${roamVision(article, entry, enemy, 183)}だけで止める。`,
+        `ワード更新は味方ADCが安全にCSを取れる波だけ。${enemy.name}が消えた直後は、置く場所の深さより帰れる距離を見る。`,
+        `味方ADCがフラッシュなしなら、${enemy.name}のミア中に川へ一人で出ない。${player.name}が横にいるだけで、最初の入りを一回遅らせられる。`
+      ], 183)
+    ];
+  }
+  return [
+    pick(article, [
+      `${roamTiming(article, entry, enemy, enemyKit, 181)}に${enemy.name}が見えないと、${spellLabel(enemyKit.cc)}から先に捕まる。${player.name}は川側ではなく自陣寄りに体を置く。`,
+      `${enemy.name}が${enemyLaneText(entry)}から消えた直後は、前のミニオンより退路を見る。${spellLabel(enemyKit.move)}が残るなら、${player.name}は横の川入口から離れる。`,
+      `${spellLabel(enemyKit.cc)}がサイドで使われていない場面では、${enemy.name}の姿がないだけで危険時間。${player.name}は押し切る前に足を止める。`
+    ], 181),
+    pick(article, [
+      `${enemy.name}の${spellLabel(enemyKit.r)}がある時間は、ローム到着後の追撃が伸びる。Rが見えるまで${spellLabel(responseSpell(playerKit))}かフラッシュを使い切らない。`,
+      `レベル6前後は${enemy.name}の${spellLabel(enemyKit.r)}を前提に立つ。${player.name}は倒し切りより、Rを見てから下がれる距離を残す。`,
+      `${enemy.name}がRを持つ時間は、一回避けても次の追撃が来る。${player.name}は反撃札を全部吐かず、味方側へ斜めに下がる。`
+    ], 182),
+    pick(article, [
+      `${enemyLaneText(entry)}側のミアを見落として深い視界へ行くと、正面の対面に勝っていても人数差で崩れる。${roamVision(article, entry, enemy, 183)}だけで止める。`,
+      `押し切った後にもう一歩川へ出る時が危ない。${enemy.name}が映るまでは、${player.name}は浅い視界とピンだけで十分。`,
+      `${enemy.name}の位置がないままタワー前に残ると、帰る距離が長すぎる。ミアが解けるまで、次の一波より体力を優先する。`
+    ], 183)
+  ];
+}
+
+function roamSkillshots(article, entry, player, enemy, playerKit, enemyKit) {
+  const response = responseSpell(playerKit);
+  if (article.lane === "JG") {
+    return {
+      hit: [
+        pick(article, [
+          `${player.name}の${spellLabel(playerKit.poke)}は、ロームが見える前のキャンプ処理と入口確認に使う。${enemy.name}が画面に入ってから慌てて撃つより、先に体力を残して川へ戻る方が強い。`,
+          `${spellLabel(playerKit.poke)}は中立を急ぐためだけに使わない。${roamTiming(article, entry, enemy, enemyKit, 191)}なら、入口へ置いて${enemy.name}の進路を遅らせる。`,
+          `川へ出る前に${spellLabel(playerKit.poke)}で小さいモンスターを片付ける。途中で${enemy.name}が見えたら、キャンプ継続より味方側へ下がる。`
+        ], 191),
+        pick(article, [
+          `${spellLabel(response)}は${enemy.name}の${spellLabel(enemyKit.move)}を見てから合わせる。先に撃つと、${spellLabel(enemyKit.cc)}で入られた時にカウンターガンクの札がない。`,
+          `${enemy.name}が${spellLabel(enemyKit.cc)}を見せるまでは、${player.name}は${spellLabel(response)}を温存する。味方が捕まった瞬間に止める方が、無理な先入りより安い。`,
+          `${spellLabel(response)}は逃げにも反撃にも使う札。${enemy.name}の移動スキルが残る間は、当てに行くより通路を塞ぐ意識で置く。`
+        ], 192),
+        pick(article, [
+          `${roamTiming(article, entry, enemy, enemyKit, 193)}なら、中立の取り切りより退路を優先する。${player.name}は味方側へ寄りながら反撃角を作る。`,
+          `${enemy.name}が見えない時間に狭い壁際へ寄らない。${player.name}は広い側で${spellLabel(response)}を構え、当たらなくても逃げ道を残す。`,
+          `味方レーンが先に動ける時だけ、${player.name}は${spellLabel(response)}で受ける。寄りが遅いなら、反対側の中立に変えて損を切る。`
+        ], 193)
+      ],
+      dodge: [
+        pick(article, [
+          `${enemy.name}の${spellLabel(enemyKit.cc)}はロームの最初の合図。${player.name}は避ける方向を考える前に、川の入口から一歩外れて射線を消す。`,
+          `${roamTiming(article, entry, enemy, enemyKit, 194)}は、${player.name}が壁際の中立を長く触らない時間。広い側へ引いてからスマイト判断をする。`,
+          `${enemy.name}が暗い場所から入るなら、${player.name}は避けるより先にピンを出す。${spellLabel(enemyKit.cc)}の線を味方にも見せるだけで事故が減る。`,
+          `${player.name}は${roamVision(article, entry, enemy, 197)}までで止める。${spellLabel(enemyKit.cc)}を見てから中立へ戻ると、カウンターガンクの形を残せる。`,
+          `${spellLabel(enemyKit.cc)}がまだ見えていないなら、${player.name}は${spellLabel(response)}を先に吐かない。避けた後に味方側へ逃がす札として数える。`
+        ], 194),
+        pick(article, [
+          `${spellLabel(enemyKit.poke)}を一発受けた後に中立へ戻らない。次の${spellLabel(enemyKit.move)}で距離を詰められる前に、味方側へ下がる。`,
+          `${enemy.name}の${spellLabel(enemyKit.move)}が残る時は、横へ避けた後の追撃まで見る。${player.name}はキャンプより体力を守る。`,
+          `一発避けても、${enemy.name}がまだ${spellLabel(enemyKit.move)}を持っているなら勝ちじゃない。視界が薄い側へ追わず、広い通路へ戻る。`
+        ], 195),
+        pick(article, [
+          `${enemy.name}の${spellLabel(enemyKit.r)}がある時間は、避けた後の追撃まで見る。取り切りの自信より、最初から届かない入口の手前で止まる方が安い。`,
+          `R絡みの時間は、スキルを避けても体力差で中立を失いやすい。${player.name}は味方の寄りがないなら先に引く。`,
+          `${spellLabel(enemyKit.r)}が見えていない時は、川の中央で足を止めない。視界を一つ置いて、次のキャンプへ戻る判断も持つ。`
+        ], 196)
+      ]
+    };
+  }
+  if (article.lane === "SUP") {
+    return {
+      hit: [
+        pick(article, [
+          `${player.name}の${spellLabel(playerKit.poke)}は、ロームが見える前に敵ボットの前歩きを止めるために使う。${enemy.name}が画面に入ってから撃つより、味方ADCの退路を先に作る。`,
+          `${spellLabel(playerKit.poke)}はブッシュ確認だけで捨てない。${roamTiming(article, entry, enemy, enemyKit, 191)}なら、敵ボットが前に出た瞬間へ残す。`,
+          `味方ADCがCSを取る瞬間だけ${spellLabel(playerKit.poke)}を合わせる。${enemy.name}のミア中に空撃ちすると、下がる圧が消える。`
+        ], 191),
+        pick(article, [
+          `${spellLabel(response)}は${enemy.name}の${spellLabel(enemyKit.move)}を見てから合わせる。先に撃つと、${spellLabel(enemyKit.cc)}で入られた時に味方ADCを守る札がない。`,
+          `${enemy.name}が見えるまでは、${player.name}の${spellLabel(response)}を開始ではなく受けに回す。味方ADCが下がる一歩を作れれば十分。`,
+          `${spellLabel(response)}を使うなら、味方ADCが追える距離だけ。${enemy.name}の${spellLabel(enemyKit.cc)}が残る時は、深追いを切る。`
+        ], 192),
+        pick(article, [
+          `${roamTiming(article, entry, enemy, enemyKit, 193)}なら、前へ踏むより味方ADCの足元へ戻る。${player.name}は逃げ道を塞がれない角度で反撃する。`,
+          `${enemy.name}が見えていない時の深いブッシュ取りはしない。${player.name}は下がりながら${spellLabel(response)}を構え、最初の入りだけ止める。`,
+          `敵ボットが前に出た瞬間だけ、${player.name}は${spellLabel(response)}で短く返す。ローム本体が見えたら追撃より退路を優先する。`
+        ], 193)
+      ],
+      dodge: [
+        pick(article, [
+          `${enemy.name}の${spellLabel(enemyKit.cc)}はロームの最初の合図。${player.name}は横へ避けるより、先に川側から味方ADCを離す。`,
+          `${spellLabel(enemyKit.cc)}の線が見えたら、${player.name}だけ避けても足りない。味方ADCの移動先を開ける位置へ下がる。`,
+          `${enemy.name}が暗い川から来るなら、${player.name}は避けるより先にピン。敵ボットの前歩きと${spellLabel(enemyKit.cc)}を同時に受けない。`,
+          `${roamTiming(article, entry, enemy, enemyKit, 194)}は、${player.name}がブッシュを取り返す時間じゃない。${spellLabel(response)}を味方ADCの退路へ回す。`,
+          `${player.name}は${roamVision(article, entry, enemy, 197)}までで止める。${spellLabel(enemyKit.cc)}を見てから下がれば、味方ADCのフラッシュを残しやすい。`
+        ], 194),
+        pick(article, [
+          `${spellLabel(enemyKit.poke)}を一発受けた後にブッシュへ戻らない。次の${spellLabel(enemyKit.move)}で距離を詰められる前に、味方ADC側へ下がる。`,
+          `${enemy.name}の${spellLabel(enemyKit.move)}が残る時は、視界を置き切る欲を捨てる。${player.name}は帰り道を先に確保する。`,
+          `一発避けても、敵ボットのCCが残るなら勝ちじゃない。${player.name}は味方ADCの横へ戻って次の入りを待つ。`
+        ], 195),
+        pick(article, [
+          `${enemy.name}の${spellLabel(enemyKit.r)}がある時間は、避けた後の追撃まで見る。避ける自信より、最初から届かない位置で味方ADCを守る方が安い。`,
+          `R絡みの時間は、軽いハラスより生存。${player.name}は${spellLabel(playerKit.protect)}を自分の小さい被弾に使い切らない。`,
+          `${spellLabel(enemyKit.r)}が見えていない時は、川側のブッシュに長く残らない。浅いワードだけ置いて味方ADCへ戻る。`
+        ], 196)
+      ]
+    };
+  }
+  return {
+    hit: [
+      pick(article, [
+        `${player.name}の${spellLabel(playerKit.poke)}は、ロームが見える前の波処理に使う。${enemy.name}が画面に入ってから撃つより、到着前にミニオンを減らして退路を作る方が強い。`,
+        `${spellLabel(playerKit.poke)}は敵本体よりミニオン波へ先に使う。${roamTiming(article, entry, enemy, enemyKit, 191)}なら、押し切ってすぐ下がる準備をする。`,
+        `ローム警戒中の${spellLabel(playerKit.poke)}は、キル狙いより波を薄くするための札。${enemy.name}が見えた瞬間に逃げ道が残る形を作る。`
+      ], 191),
+      pick(article, [
+        `${spellLabel(response)}は${enemy.name}の${spellLabel(enemyKit.move)}を見てから合わせる。先に撃つと、${spellLabel(enemyKit.cc)}で入られた時に止めるものがない。`,
+        `${enemy.name}の入りが見えるまでは、${player.name}の${spellLabel(response)}を温存する。最初の移動を受けてから足止めする方が事故が少ない。`,
+        `${spellLabel(response)}を先に吐くなら、${enemy.name}がミニマップに映っている時だけ。見えていない時間は、逃げ札として数える。`
+      ], 192),
+      pick(article, [
+        `${roamTiming(article, entry, enemy, enemyKit, 193)}なら、当てに行くより足元へ置く。${player.name}は逃げ道を塞がれない角度で反撃する。`,
+        `${enemy.name}が画面に入った後は、深追いの命中より短い足止め。${player.name}は味方側へ動きながら返す。`,
+        `相手が見えた瞬間に全部撃たない。${player.name}は一つ目を避け、二つ目の入りへ${spellLabel(response)}を合わせる。`
+      ], 193)
+    ],
+    dodge: [
+      pick(article, [
+        `${enemy.name}の${spellLabel(enemyKit.cc)}はロームの最初の合図。${player.name}は横へ避けるより、先に川側から離れて射線そのものを消す。`,
+        `${spellLabel(enemyKit.cc)}を避ける前に、そもそも届く線へ立たない。${player.name}は川側ではなく自陣側のミニオン横で受ける。`,
+        `${enemy.name}が暗い入口から来るなら、${player.name}は反応で避けるよりミアの時点で下がる。${spellLabel(enemyKit.cc)}の射線を作らせない。`,
+        `${roamTiming(article, entry, enemy, enemyKit, 194)}は、${player.name}が前のミニオンを取りに行く時間じゃない。${spellLabel(response)}を残して斜め後ろへ下がる。`,
+        `${player.name}は${roamVision(article, entry, enemy, 197)}までで止める。${spellLabel(enemyKit.cc)}を見てからなら、波を捨てても次を受けられる。`
+      ], 194),
+      pick(article, [
+        `${spellLabel(enemyKit.poke)}を一発受けた後に居座らない。次の${spellLabel(enemyKit.move)}で距離を詰められる前に、味方側へ下がる。`,
+        `${enemy.name}の${spellLabel(enemyKit.move)}が残る時は、横へ避けた後の追撃まで見る。${player.name}は次の波より体力を守る。`,
+        `一発避けても、${enemy.name}がまだ${spellLabel(enemyKit.move)}を持っているなら勝ちじゃない。追うより自陣側へ戻る。`
+      ], 195),
+      pick(article, [
+        `${enemy.name}の${spellLabel(enemyKit.r)}がある時間は、避けた後の追撃まで見る。避ける自信より、最初から届かない位置で波を取る方が安い。`,
+        `R絡みの時間は、避けた後に反撃しようとしすぎない。${player.name}はフラッシュか${spellLabel(response)}を残して次の波へ逃がす。`,
+        `${spellLabel(enemyKit.r)}が見えていない時は、タワー前でも長居しない。${enemy.name}のミアが解けてから、押し返す。`
+      ], 196)
+    ]
   };
 }
 
@@ -455,7 +934,7 @@ function buildReplacement(article, entry, championById, detailById, runes, date)
 
   const playerKit = kit(playerDetail);
   const enemyKit = kit(enemyDetail);
-  const trades = tradeAdvice(article, player, enemy, playerKit, enemyKit);
+  const trades = tradeAdvice(article, entry, player, enemy, playerKit, enemyKit);
   const opener = laneOpener(article, entry, player, enemy, playerKit, enemyKit);
   const enemyDamage = damageProfile(enemy);
   const direct = (entry.enemyLanes || []).includes(article.lane);
@@ -474,7 +953,9 @@ function buildReplacement(article, entry, championById, detailById, runes, date)
     player: article.player,
     enemy: article.enemy,
     lane: article.lane,
-    summary: `${opener} ${player.name}側は${playerKit.poke.name}を当てる前に、${enemy.name}の${enemyTools}が残っているかを見る。`,
+    summary: direct
+      ? `${opener} ${player.name}側は${spellLabel(playerKit.poke)}を当てる前に、${enemy.name}の${enemyTools}が残っているかを見る。`
+      : `${opener} ${roamTiming(article, entry, enemy, enemyKit, 171)}なら、${playerRoamSetup(article, entry, player, enemy, playerKit, enemyKit, 172)}。`,
     winCondition: direct
       ? pick(article, [
         `勝ち筋は${enemy.name}の${enemyKit.cc.name}を空振りさせた直後に、${player.name}の${playerTools}で短く体力差を作ること。倒し切れない時は波を整えて、次の交換まで相手の強い時間をやり過ごす。`,
@@ -482,49 +963,47 @@ function buildReplacement(article, entry, championById, detailById, runes, date)
         `勝つ形は、${enemy.name}の入りを一度外させてから${player.name}の${playerTools}を重ねること。最初の交換で倒せないなら、追撃よりリコールと視界へ変える。`
       ], 61)
       : pick(article, [
-        `勝ち筋は${enemy.name}が${enemyLaneText(entry)}から動く前に情報を取り、${player.name}の${playerKit.cc.name}を${keepSkillPurpose}。正面のキルだけでなく、視界、リコール、オブジェクト前の立ち位置で差を作る。`,
-        `${enemyMapCue(article, entry, enemy, 62)}を先に拾い、${player.name}は${playerKit.poke.name}で波を整える。${playerKit.cc.name}を残せていれば、寄られても一度は下がれる。`,
-        `この組み合わせは正面の殴り合いより、${enemy.name}の移動を早く見るほど楽になる。${player.name}側は体力差より先に、川の視界と帰る時間を確保する。`
+        `勝ち筋は${enemy.name}が${enemyLaneText(entry)}から動く前に情報を取り、${player.name}の${spellLabel(playerKit.cc)}を${keepSkillPurpose}。${spellLabel(enemyKit.move)}の到着を見てから下がれば、正面の有利を失わずに済む。`,
+        `${roamTiming(article, entry, enemy, enemyKit, 62)}を先に拾い、${playerRoamSetup(article, entry, player, enemy, playerKit, enemyKit, 64)}。寄られても一度下がれる形を残す。`,
+        `この組み合わせは正面の殴り合いより、${enemy.name}の移動を早く見るほど楽になる。${player.name}側は${roamVision(article, entry, enemy, 63)}だけで欲張りを止め、帰る時間を確保する。`
       ], 62),
-    threatModel: [
-      pick(article, [
-        `${enemy.name}の${enemyKit.cc.name}を受けると、${player.name}が${playerKit.poke.name}で返す前に位置を固定されやすい。相手の射程や移動先を見てから前に出る。`,
-        `${enemy.name}の${enemyTools}が残る時は、先に歩いた側が損をしやすい。${player.name}はミニオンの横から触って、直線で受けない。`,
-        `${enemy.name}に先手を渡すと、${player.name}の${playerKit.cc.name}を反撃ではなく逃げに使わされる。仕掛ける前に相手の一手を吐かせる。`
-      ], 63),
-      pick(article, [
-        `${enemy.name}は${enemyDamage}の${archetype(enemy)}。${enemyKit.poke.name}を続けて受けると、次の波でCSを取るだけでも危険になる。`,
-        `${enemy.name}の火力は${enemyDamage}に寄る。防御を後回しにすると、${player.name}がスキルを返す前に体力だけ削られる。`,
-        `${enemyKit.poke.name}を複数回受ける展開は避けたい。${player.name}側は一度下がってでも、次のミニオン波で仕切り直す方が安い。`
-      ], 64),
-      direct
-        ? pick(article, [
-          `${laneLabel(article.lane)}の直接対面ではミニオン数が多い側が強い。${enemy.name}本体だけ見て追うと、ミニオンと${enemyKit.cc.name}で交換が崩れる。`,
+    threatModel: direct
+      ? [
+        pick(article, [
+          `${enemy.name}の${spellLabel(enemyKit.cc)}を受けると、${player.name}が${spellLabel(playerKit.poke)}で返す前に位置を固定されやすい。相手の射程や移動先を見てから前に出る。`,
+          `${enemy.name}の${enemyTools}が残る時は、先に歩いた側が損をしやすい。${player.name}はミニオンの横から触って、直線で受けない。`,
+          `${enemy.name}に先手を渡すと、${player.name}の${spellLabel(playerKit.cc)}を反撃ではなく逃げに使わされる。仕掛ける前に相手の一手を吐かせる。`
+        ], 63),
+        pick(article, [
+          `${enemy.name}は${enemyDamage}の${archetype(enemy)}。${spellLabel(enemyKit.poke)}を続けて受けると、次の波でCSを取るだけでも危険になる。`,
+          `${enemy.name}の火力は${enemyDamage}に寄る。防御を後回しにすると、${player.name}がスキルを返す前に体力だけ削られる。`,
+          `${spellLabel(enemyKit.poke)}を複数回受ける展開は避けたい。${player.name}側は一度下がってでも、次のミニオン波で仕切り直す方が安い。`
+        ], 64),
+        pick(article, [
+          `${laneLabel(article.lane)}の直接対面ではミニオン数が多い側が強い。${enemy.name}本体だけ見て追うと、ミニオンと${spellLabel(enemyKit.cc)}で交換が崩れる。`,
           `直接対面では、敵ミニオンが多い時の追撃が一番安い負け方。${enemy.name}を削っても、波が悪いならそこで止める。`,
           `${enemy.name}が下がった後も、ミニオンが残っているなら深追いしない。${player.name}は次のラストヒットを取れる位置で十分。`
         ], 65)
-        : pick(article, [
-          `${enemy.name}は${enemyLaneText(entry)}から現れる想定。マップに映っていない時は、勝っている場面でも川の奥へ深く入らない。`,
-          `${enemyMapCue(article, entry, enemy, 66)}は、勝っているレーンでも前に出る理由にならない。先に浅い視界を置き、味方と同じ画面で動く。`,
-          `${enemy.name}が見えていない時間は、CSを一つ落としても立ち位置を浅くする。捕まると、正面の有利まで一緒に消える。`
-        ], 66)
-    ],
+      ]
+      : roamThreatModel(article, entry, player, enemy, playerKit, enemyKit),
     trading: trades,
     lanePlan: lanePlan(article, entry, player, enemy, playerKit, enemyKit),
     runes: runeChoice(article, player, enemy, runes),
-    items: itemPlan(article, player, enemy, playerKit),
-    skillshots: {
-      hit: [
-        `${player.name}の${playerKit.poke.name}は、${enemy.name}がCS、ワード、味方への追撃で足を止めた瞬間に合わせる。正面から何となく撃つより、退路に置く方が当たりやすい。`,
-        `${spellPair([playerKit.cc, playerKit.move, playerKit.protect])}は味方のCC、壁際、ブッシュからの視界差に合わせる。${enemy.name}の${enemyKit.move.name}を見てから使うと、逃げ先を読みやすい。`,
-        `${enemy.name}の${enemyKit.cc.name}がクールダウン中なら、${playerKit.poke.name}を当てた後に一歩だけ前へ出る。追いすぎると次の反撃が間に合う。`
-      ],
-      dodge: [
-        `${enemy.name}の${enemyKit.cc.name}を最優先で見る。前後ではなく横へずれ、当たらなかった時だけ${player.name}の反撃を考える。`,
-        `${enemyKit.poke.name}はミニオン、壁、狭い通路で避けにくくなる。射線が狭い場所に残らず、広い側へ歩いてから交換する。`,
-        `低体力時は${enemy.name}のRや${enemyKit.move.name}を避けても、次の通常攻撃や追撃で落ちることがある。避ける前に、そもそも射程へ入らない。`
-      ]
-    },
+    items: itemPlan(article, entry, player, enemy, playerKit, enemyKit),
+    skillshots: direct
+      ? {
+        hit: [
+          `${player.name}の${spellLabel(playerKit.poke)}は、${enemy.name}がCS、ワード、味方への追撃で足を止めた瞬間に合わせる。正面から何となく撃つより、退路に置く方が当たりやすい。`,
+          `${spellPair([playerKit.cc, playerKit.move, playerKit.protect])}は味方のCC、壁際、ブッシュからの視界差に合わせる。${enemy.name}の${spellLabel(enemyKit.move)}を見てから使うと、逃げ先を読みやすい。`,
+          `${enemy.name}の${spellLabel(enemyKit.cc)}がクールダウン中なら、${spellLabel(playerKit.poke)}を当てた後に一歩だけ前へ出る。追いすぎると次の反撃が間に合う。`
+        ],
+        dodge: [
+          `${enemy.name}の${spellLabel(enemyKit.cc)}を最優先で見る。前後ではなく横へずれ、当たらなかった時だけ${player.name}の反撃を考える。`,
+          `${spellLabel(enemyKit.poke)}はミニオン、壁、狭い通路で避けにくくなる。射線が狭い場所に残らず、広い側へ歩いてから交換する。`,
+          `低体力時は${enemy.name}の${spellAlternatives([enemyKit.r, enemyKit.move])}を避けても、次の通常攻撃や追撃で落ちることがある。避ける前に、そもそも射程へ入らない。`
+        ]
+      }
+      : roamSkillshots(article, entry, player, enemy, playerKit, enemyKit),
     teamfights: [
       pick(article, [
         `${player.name}は最初に${enemy.name}へ突っ込むより、${enemy.name}が通る狭い場所へ${playerKit.cc.name}を残す。味方の後衛が安全なら、それだけで仕事になる。`,
